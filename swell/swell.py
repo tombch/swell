@@ -100,7 +100,6 @@ def swell_from_fasta(fasta_path):
     max_ungap = 0
 
     if fasta_path:
-        # from . import readfq # thanks heng
         import readfq # thanks heng
         heng_iter = readfq.readfq(open(fasta_path))
         for name, seq, qual in heng_iter:
@@ -156,7 +155,7 @@ def swell_from_fasta(fasta_path):
     return ["fasta_path", "num_seqs", "num_bases", "pc_acgt", "pc_masked", "pc_invalid", "pc_ambiguous", "longest_gap", "longest_ungap"], [fasta_path, num_seqs, num_bases, prop_acgt, prop_masked, prop_invalid, prop_ambiguous, max_gap, max_ungap]
 
 
-def swell_from_either(depth_iterable, depth_path, tiles, genomes, thresholds, min_pos=None, min_pos_total_zero=False):
+def swell_from_depth_iter(depth_iterable, depth_path, tiles, genomes, thresholds, min_pos=None, min_pos_total_zero=False):
     threshold_counters = {
         threshold: 0 for threshold in thresholds
     }
@@ -258,22 +257,12 @@ def swell_from_either(depth_iterable, depth_path, tiles, genomes, thresholds, mi
 
 def swell_from_depth(depth_path, tiles, genomes, thresholds, min_pos=None, min_pos_total_zero=False):
     depth_fh = open(depth_path)
-    return swell_from_either(depth_fh, depth_path, tiles, genomes, thresholds, min_pos=None, min_pos_total_zero=False)
+    return swell_from_depth_iter(depth_fh, depth_path, tiles, genomes, thresholds, min_pos=None, min_pos_total_zero=False)
 
 
 def swell_from_bam(bam_path, tiles, genomes, thresholds, min_pos=None, min_pos_total_zero=False):
     depth_iterable = (x.group(0) for x in re.finditer('.*\n', pysam.depth('-a', bam_path)[:-1]))
-    return swell_from_either(depth_iterable, bam_path, tiles, genomes, thresholds, min_pos=None, min_pos_total_zero=False)
-
-
-# def depth_array(bam_path, region=None):
-#     if region:
-#         depth_iterable = pysam.depth('-a', bam_path, '-r', region)[:-1]
-#     else:
-#         depth_iterable = pysam.depth('-a', bam_path)[:-1]
-#     depth_iterable = re.sub('.*\t.*\t', '', depth_iterable)
-#     arr = np.fromstring(depth_iterable, dtype='int32', sep='\n')
-#     return arr
+    return swell_from_depth_iter(depth_iterable, bam_path, tiles, genomes, thresholds, min_pos=None, min_pos_total_zero=False)
 
 
 # def swell_from_bam(bam_path, tiles, genome):
