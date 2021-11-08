@@ -6,76 +6,75 @@ import re
 
 def load_scheme(scheme_bed):
     tiles_d = {}
-    scheme_fh = open(scheme_bed)
+    with open(scheme_bed) as scheme_fh:
+        for line in scheme_fh:
+            ref, start, end, tile, pool = line.strip().split()
+            scheme, tile, side = tile.split("_", 2)
 
-    for line in scheme_fh:
-        ref, start, end, tile, pool = line.strip().split()
-        scheme, tile, side = tile.split("_", 2)
+            start = int(start)
+            end = int(end)
 
-        start = int(start)
-        end = int(end)
+            if tile not in tiles_d:
+                tiles_d[tile] = {
+                    "start": -1,
+                    "inside_start": -1,
+                    "inside_end": -1,
+                    "end": -1,
+                }
 
-        if tile not in tiles_d:
-            tiles_d[tile] = {
-                "start": -1,
-                "inside_start": -1,
-                "inside_end": -1,
-                "end": -1,
-            }
+            if "LEFT" in side.upper():
+                if tiles_d[tile]["start"] == -1:
+                    tiles_d[tile]["start"] = start
+                    tiles_d[tile]["inside_start"] = end
 
-        if "LEFT" in side.upper():
-            if tiles_d[tile]["start"] == -1:
-                tiles_d[tile]["start"] = start
-                tiles_d[tile]["inside_start"] = end
+                if start < tiles_d[tile]["start"]:
+                    # push the window region to the leftmost left position
+                    tiles_d[tile]["start"] = start
+                if end > tiles_d[tile]["inside_start"]:
+                    # open the start of the inner window to the rightmost left position
+                    tiles_d[tile]["inside_start"] = end
 
-            if start < tiles_d[tile]["start"]:
-                # push the window region to the leftmost left position
-                tiles_d[tile]["start"] = start
-            if end > tiles_d[tile]["inside_start"]:
-                # open the start of the inner window to the rightmost left position
-                tiles_d[tile]["inside_start"] = end
+            elif "RIGHT" in side.upper():
+                if tiles_d[tile]["end"] == -1:
+                    tiles_d[tile]["end"] = end
+                    tiles_d[tile]["inside_end"] = start
 
-        elif "RIGHT" in side.upper():
-            if tiles_d[tile]["end"] == -1:
-                tiles_d[tile]["end"] = end
-                tiles_d[tile]["inside_end"] = start
+                if end > tiles_d[tile]["end"]:
+                    # stretch the window out to the rightmost right position
+                    tiles_d[tile]["end"] = end
+                if start < tiles_d[tile]["inside_end"]:
+                    # close the end of the inner window to the leftmost right position
+                    tiles_d[tile]["inside_end"] = start
 
-            if end > tiles_d[tile]["end"]:
-                # stretch the window out to the rightmost right position
-                tiles_d[tile]["end"] = end
-            if start < tiles_d[tile]["inside_end"]:
-                # close the end of the inner window to the leftmost right position
-                tiles_d[tile]["inside_end"] = start
+        l_tiles = []
+        tiles_seen = set([])
+        scheme_fh.seek(0)
+        for line in scheme_fh:
+            ref, start, end, tile, pool = line.strip().split()
+            scheme, tile, side = tile.split("_", 2)
+            tile_tup = (scheme, tile, tiles_d[tile])
+            if tiles_d[tile]["inside_start"] != -1 and tiles_d[tile]["inside_end"] != -1 and tile not in tiles_seen:
+                l_tiles.append(tile_tup)
+                tiles_seen.add(tile)
 
-    l_tiles = []
-    tiles_seen = set([])
-    scheme_fh.seek(0)
-    for line in scheme_fh:
-        ref, start, end, tile, pool = line.strip().split()
-        scheme, tile, side = tile.split("_", 2)
-        tile_tup = (scheme, tile, tiles_d[tile])
-        if tiles_d[tile]["inside_start"] != -1 and tiles_d[tile]["inside_end"] != -1 and tile not in tiles_seen:
-            l_tiles.append(tile_tup)
-            tiles_seen.add(tile)
+        l_tiles = sorted(l_tiles, key=lambda x: int(x[1])) # sort by tile number
 
-    l_tiles = sorted(l_tiles, key=lambda x: int(x[1])) # sort by tile number
+        # iterate through tiles and clip
+        new_tiles = []
+        for tile_i0, tile_t in enumerate(l_tiles):
+            tile = dict(tile_t[2]) # copy the dict god this is gross stuff
 
-    # iterate through tiles and clip
-    new_tiles = []
-    for tile_i0, tile_t in enumerate(l_tiles):
-        tile = dict(tile_t[2]) # copy the dict god this is gross stuff
+            # Clip the start of this window to the end of the last window
+            # (if there is a last window)
+            if (tile_i0 - 1) >= 0:
+                tile["inside_start"] = l_tiles[tile_i0 - 1][2]["end"]
 
-        # Clip the start of this window to the end of the last window
-        # (if there is a last window)
-        if (tile_i0 - 1) >= 0:
-            tile["inside_start"] = l_tiles[tile_i0 - 1][2]["end"]
+            # Clip the end of this window to the start of the next window
+            # (if there is a next window)
+            if (tile_i0 + 1) < len(l_tiles):
+                tile["inside_end"] = l_tiles[tile_i0 + 1][2]["start"]
 
-        # Clip the end of this window to the start of the next window
-        # (if there is a next window)
-        if (tile_i0 + 1) < len(l_tiles):
-            tile["inside_end"] = l_tiles[tile_i0 + 1][2]["start"]
-
-        new_tiles.append((tile_t[0], tile_t[1], tile))
+            new_tiles.append((tile_t[0], tile_t[1], tile))
 
     return new_tiles
 
@@ -101,56 +100,57 @@ def swell_from_fasta(fasta_path):
 
     if fasta_path:
         import readfq # thanks heng
-        heng_iter = readfq.readfq(open(fasta_path))
-        for name, seq, qual in heng_iter:
-            num_seqs += 1
-            for base in seq:
-                num_bases += 1
-                gap = 1
+        with open(fasta_path) as fasta_fh:
+            heng_iter = readfq.readfq(fasta_fh)
+            for name, seq, qual in heng_iter:
+                num_seqs += 1
+                for base in seq:
+                    num_bases += 1
+                    gap = 1
 
-                if base.upper() in ['A', 'C', 'G', 'T']:
-                    num_acgt += 1
-                    gap = 0
-                elif base.upper() in ['N']:
-                    num_masked += 1
-                elif base.upper() in ['X', '-', '_', ' ']:
-                    num_invalid += 1
-                elif base.upper() in 'WSMKRYBDHV':
-                    num_ambiguous += 1
+                    if base.upper() in ['A', 'C', 'G', 'T']:
+                        num_acgt += 1
+                        gap = 0
+                    elif base.upper() in ['N']:
+                        num_masked += 1
+                    elif base.upper() in ['X', '-', '_', ' ']:
+                        num_invalid += 1
+                    elif base.upper() in 'WSMKRYBDHV':
+                        num_ambiguous += 1
 
-                if gap:
-                    if curr_ungap_len > 0:
-                        n_ungaps.append(curr_ungap_len)
-                        curr_ungap_len = 0
-                    curr_gap_len += 1
-                elif not gap:
-                    if curr_gap_len > 0:
-                        n_gaps.append(curr_gap_len)
-                        curr_gap_len = 0
-                    curr_ungap_len += 1
+                    if gap:
+                        if curr_ungap_len > 0:
+                            n_ungaps.append(curr_ungap_len)
+                            curr_ungap_len = 0
+                        curr_gap_len += 1
+                    elif not gap:
+                        if curr_gap_len > 0:
+                            n_gaps.append(curr_gap_len)
+                            curr_gap_len = 0
+                        curr_ungap_len += 1
 
-        if curr_gap_len > 0:
-            n_gaps.append(curr_gap_len)
-        elif curr_ungap_len > 0:
-            n_gaps.append(curr_ungap_len)
+            if curr_gap_len > 0:
+                n_gaps.append(curr_gap_len)
+            elif curr_ungap_len > 0:
+                n_gaps.append(curr_ungap_len)
 
-        if num_bases > 0:
-            prop_acgt = num_acgt / num_bases * 100.0
-            prop_masked = num_masked / num_bases * 100.0
-            prop_invalid = num_invalid / num_bases * 100.0
-            prop_ambiguous = num_ambiguous / num_bases * 100.0
+            if num_bases > 0:
+                prop_acgt = num_acgt / num_bases * 100.0
+                prop_masked = num_masked / num_bases * 100.0
+                prop_invalid = num_invalid / num_bases * 100.0
+                prop_ambiguous = num_ambiguous / num_bases * 100.0
 
-            if len(n_gaps) > 0:
-                max_gap = max(n_gaps)
+                if len(n_gaps) > 0:
+                    max_gap = max(n_gaps)
+                else:
+                    max_gap = 0
+
+                if len(n_ungaps) > 0:
+                    max_ungap = max(n_ungaps)
+                else:
+                    max_ungap = 0
             else:
-                max_gap = 0
-
-            if len(n_ungaps) > 0:
-                max_ungap = max(n_ungaps)
-            else:
-                max_ungap = 0
-        else:
-            prop_invalid = 100.0
+                prop_invalid = 100.0
 
     return ["fasta_path", "num_seqs", "num_bases", "pc_acgt", "pc_masked", "pc_invalid", "pc_ambiguous", "longest_gap", "longest_ungap"], [fasta_path, num_seqs, num_bases, prop_acgt, prop_masked, prop_invalid, prop_ambiguous, max_gap, max_ungap]
 
@@ -256,8 +256,8 @@ def swell_from_depth_iter(depth_iterable, depth_path, tiles, genomes, thresholds
 
 
 def swell_from_depth(depth_path, tiles, genomes, thresholds, min_pos=None, min_pos_total_zero=False):
-    depth_fh = open(depth_path)
-    return swell_from_depth_iter(depth_fh, depth_path, tiles, genomes, thresholds, min_pos=None, min_pos_total_zero=False)
+    with open(depth_path) as depth_fh:
+        return swell_from_depth_iter(depth_fh, depth_path, tiles, genomes, thresholds, min_pos=None, min_pos_total_zero=False)
 
 
 def swell_from_bam(bam_path, tiles, genomes, thresholds, min_pos=None, min_pos_total_zero=False):
