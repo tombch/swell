@@ -2,6 +2,7 @@ import argparse
 import sys
 import pysam
 import numpy as np
+import re
 
 def load_scheme(scheme_bed):
     tiles_d = {}
@@ -59,7 +60,6 @@ def load_scheme(scheme_bed):
 
     l_tiles = sorted(l_tiles, key=lambda x: int(x[1])) # sort by tile number
 
-
     # iterate through tiles and clip
     new_tiles = []
     for tile_i0, tile_t in enumerate(l_tiles):
@@ -85,6 +85,7 @@ def swell_from_fasta(fasta_path):
     num_acgt = 0
     num_masked = 0
     num_invalid = 0
+    num_ambiguous = 0
 
     n_ungaps = []
     n_gaps = []
@@ -94,11 +95,13 @@ def swell_from_fasta(fasta_path):
     prop_acgt = 0
     prop_masked = 0
     prop_invalid = 0
+    prop_ambiguous = 0
     max_gap = 0
     max_ungap = 0
 
     if fasta_path:
-        from . import readfq # thanks heng
+        # from . import readfq # thanks heng
+        import readfq # thanks heng
         heng_iter = readfq.readfq(open(fasta_path))
         for name, seq, qual in heng_iter:
             num_seqs += 1
@@ -109,18 +112,18 @@ def swell_from_fasta(fasta_path):
                 if base.upper() in ['A', 'C', 'G', 'T']:
                     num_acgt += 1
                     gap = 0
-
                 elif base.upper() in ['N']:
                     num_masked += 1
                 elif base.upper() in ['X', '-', '_', ' ']:
                     num_invalid += 1
+                elif base.upper() in 'WSMKRYBDHV':
+                    num_ambiguous += 1
 
                 if gap:
                     if curr_ungap_len > 0:
                         n_ungaps.append(curr_ungap_len)
                         curr_ungap_len = 0
                     curr_gap_len += 1
-
                 elif not gap:
                     if curr_gap_len > 0:
                         n_gaps.append(curr_gap_len)
@@ -136,6 +139,7 @@ def swell_from_fasta(fasta_path):
             prop_acgt = num_acgt / num_bases * 100.0
             prop_masked = num_masked / num_bases * 100.0
             prop_invalid = num_invalid / num_bases * 100.0
+            prop_ambiguous = num_ambiguous / num_bases * 100.0
 
             if len(n_gaps) > 0:
                 max_gap = max(n_gaps)
@@ -149,13 +153,10 @@ def swell_from_fasta(fasta_path):
         else:
             prop_invalid = 100.0
 
-    return ["fasta_path", "num_seqs", "num_bases", "pc_acgt", "pc_masked", "pc_invalid", "longest_gap", "longest_ungap"], [fasta_path, num_seqs, num_bases, prop_acgt, prop_masked, prop_invalid, max_gap, max_ungap]
+    return ["fasta_path", "num_seqs", "num_bases", "pc_acgt", "pc_masked", "pc_invalid", "pc_ambiguous", "longest_gap", "longest_ungap"], [fasta_path, num_seqs, num_bases, prop_acgt, prop_masked, prop_invalid, prop_ambiguous, max_gap, max_ungap]
 
 
-
-def swell_from_depth(depth_path, tiles, genomes, thresholds, min_pos=None, min_pos_total_zero=False):
-    depth_fh = open(depth_path)
-
+def swell_from_either(depth_iterable, depth_path, tiles, genomes, thresholds, min_pos=None, min_pos_total_zero=False):
     threshold_counters = {
         threshold: 0 for threshold in thresholds
     }
@@ -175,7 +176,7 @@ def swell_from_depth(depth_path, tiles, genomes, thresholds, min_pos=None, min_p
         tile_dat = [[] for t in tiles]
 
     n_lines = 0
-    for line in depth_fh:
+    for line in depth_iterable:
         n_lines += 1
         ref, pos, cov = line.strip().split('\t')
         if sum([g in ref for g in genomes]) != 1:
@@ -228,7 +229,6 @@ def swell_from_depth(depth_path, tiles, genomes, thresholds, min_pos=None, min_p
                 tile_threshold_counters[threshold] += 1
 
         #print(depth_path, tile_num, tile[0], tile[1], scheme_name, mean_cov, median_cov, len_win)
-
     if min_pos:
         if n_positions < min_pos:
             if min_pos_total_zero and n_lines == 0:
@@ -255,25 +255,47 @@ def swell_from_depth(depth_path, tiles, genomes, thresholds, min_pos=None, min_p
 
     return ["bam_path", "num_pos", "mean_cov"] + ["pc_pos_cov_gte%d" % x for x in sorted(thresholds)] + ["pc_tiles_medcov_gte%d" % x for x in sorted(thresholds)] + ["tile_n", "tile_vector"], [depth_path.replace(".depth", ""), n_positions, avg_cov] + threshold_counts_prop + tile_threshold_counts_prop + [len(tile_vector), tile_vector_str]
 
-#def swell_from_bam(bam_path, tiles, genome):
-#    bam = pysam.AlignmentFile(bam_path)
-#
+
+def swell_from_depth(depth_path, tiles, genomes, thresholds, min_pos=None, min_pos_total_zero=False):
+    depth_fh = open(depth_path)
+    return swell_from_either(depth_fh, depth_path, tiles, genomes, thresholds, min_pos=None, min_pos_total_zero=False)
+
+
+def swell_from_bam(bam_path, tiles, genomes, thresholds, min_pos=None, min_pos_total_zero=False):
+    depth_iterable = (x.group(0) for x in re.finditer('.*\n', pysam.depth('-a', bam_path)[:-1]))
+    return swell_from_either(depth_iterable, bam_path, tiles, genomes, thresholds, min_pos=None, min_pos_total_zero=False)
+
+
+# def depth_array(bam_path, region=None):
+#     if region:
+#         depth_iterable = pysam.depth('-a', bam_path, '-r', region)[:-1]
+#     else:
+#         depth_iterable = pysam.depth('-a', bam_path)[:-1]
+#     depth_iterable = re.sub('.*\t.*\t', '', depth_iterable)
+#     arr = np.fromstring(depth_iterable, dtype='int32', sep='\n')
+#     return arr
+
+
+# def swell_from_bam(bam_path, tiles, genome):
+#     bam = pysam.AlignmentFile(bam_path)
+
 #    for (scheme_name, tile_num, tile) in tiles:
 #        tile_cover = bam.count_coverage(genome, tile[0]-1, tile[1],
 #                quality_threshold=0, read_callback="all")
 #        flat_tile_cover = np.array(tile_cover).sum(axis=0)
-#
+
 #        mean_cov = np.mean(flat_tile_cover)
 #        median_cov = np.median(flat_tile_cover)
 #        print(bam_path, tile_num, tile[0], tile[1], scheme_name, mean_cov, median_cov)
 
+
 def main():
     import argparse
     parser = argparse.ArgumentParser()
-#    group = parser.add_mutually_exclusive_group(required=True)
-#    group.add_argument("--bam")
-    parser.add_argument("--depth", required=True)
-    parser.add_argument("--ref", required=True, nargs='+')
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--bam") # bam file
+    group.add_argument("--depth") # depth file produced from bam via samtools
+    parser.add_argument("--ref", required=True, nargs='+') # sequence name
     parser.add_argument("--thresholds", action='append', type=int, nargs='+', default=[1, 5, 10, 20, 50, 100, 200])
     parser.add_argument("--bed", required=False)
     parser.add_argument("--fasta", required=False)
@@ -289,10 +311,6 @@ def main():
     else:
         tiles = {}
 
-    #if args.bam:
-    #    swell_from_bam(args.bam, tiles, args.ref[0])
-    #elif args.depth:
-    #    swell_from_depth(args.depth, tiles, args.ref)
     fields = []
     header = []
 
@@ -300,19 +318,23 @@ def main():
     header.extend(header_)
     fields.extend(fields_)
 
-    header_, fields_ = swell_from_depth(args.depth, tiles, args.ref, args.thresholds, min_pos=args.min_pos, min_pos_total_zero=args.min_pos_allow_total_zero)
+    if args.bam:
+       header_, fields_ = swell_from_bam(args.bam, tiles, args.ref, args.thresholds, min_pos=args.min_pos, min_pos_total_zero=args.min_pos_allow_total_zero)
+    elif args.depth:
+       header_, fields_ = swell_from_depth(args.depth, tiles, args.ref, args.thresholds, min_pos=args.min_pos, min_pos_total_zero=args.min_pos_allow_total_zero)
+
     header.extend(header_)
     fields.extend(fields_)
 
     keys = []
     values = []
-    if hasattr(args, "x"):
+    # if hasattr(args, "x"):
+    if args.x:
         for meta in args.x:
             keys.append(meta[0])
             values.append(meta[1])
     header.extend(keys)
     fields.extend(values)
-
 
     print("\t".join(header))
     fields_s = [("%."+str(args.dp)+"f") % x if "float" in type(x).__name__ else str(x) for x in fields] # do not fucking @ me
