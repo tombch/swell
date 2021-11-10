@@ -5,7 +5,7 @@ import numpy as np
 import re
 
 
-def clip_windows(l_tiles):
+def clip_tiles(l_tiles):
     # iterate through tiles and clip
     new_tiles = []
     for tile_i0, tile_t in enumerate(l_tiles):
@@ -80,7 +80,7 @@ def load_scheme(scheme_bed, no_clip=False):
 
     l_tiles = sorted(l_tiles, key=lambda x: int(x[1])) # sort by tile number
     if not no_clip:
-        new_tiles = clip_windows(l_tiles)
+        new_tiles = clip_tiles(l_tiles)
     else:
         new_tiles = l_tiles
 
@@ -262,7 +262,7 @@ def swell_from_depth_iter(depth_iterable, depth_path, tiles, genomes, thresholds
     else:
         tile_vector_str = ",".join(["%.2f" % x for x in tile_vector])
 
-    return ["bam_path", "num_pos", "mean_cov"] + ["pc_pos_cov_gte%d" % x for x in sorted(thresholds)] + ["pc_tiles_medcov_gte%d" % x for x in sorted(thresholds)] + ["tile_n", "tile_vector"], [depth_path.replace(".depth", ""), n_positions, avg_cov] + threshold_counts_prop + tile_threshold_counts_prop + [len(tile_vector), tile_vector_str]
+    return tile_vector, ["bam_path", "num_pos", "mean_cov"] + ["pc_pos_cov_gte%d" % x for x in sorted(thresholds)] + ["pc_tiles_medcov_gte%d" % x for x in sorted(thresholds)] + ["tile_n", "tile_vector"], [depth_path.replace(".depth", ""), n_positions, avg_cov] + threshold_counts_prop + tile_threshold_counts_prop + [len(tile_vector), tile_vector_str]
 
 
 def swell_from_depth(depth_path, tiles, genomes, thresholds, min_pos=None, min_pos_total_zero=False):
@@ -288,6 +288,17 @@ def swell_from_bam(bam_path, tiles, genomes, thresholds, min_pos=None, min_pos_t
 #        print(bam_path, tile_num, tile[0], tile[1], scheme_name, mean_cov, median_cov)
 
 
+def tile_histogram(tile_vector, tiles):
+    histogram_string = "TILE\tSTART\tEND\tMEDIAN\n\t\t\tDEPTH\n"
+    if len(tile_vector) > 0:
+        for i in range(len(tile_vector)):
+            # tiles are sorted
+            histogram_string += f"{i+1}\t{tiles[i][2]['inside_start']}\t{tiles[i][2]['inside_end']}\t{int(round(tile_vector[i]))}\t{'='*int(round(0.01*tile_vector[i]))}\n"
+    else:
+        histogram_string += f"{None}\t{None}\t{None}\t{None}\n"
+    return histogram_string[:-1]
+
+
 class ArgumentParserError(Exception):
     pass
 
@@ -310,7 +321,8 @@ def main():
     parser.add_argument("--min-pos", type=int, required=False)
     parser.add_argument("--min-pos-allow-total-zero", action="store_true")
     parser.add_argument("-x", action="append", nargs=2, metavar=("key", "value",))
-    parser.add_argument("--no-window-clipping", action="store_true")
+    parser.add_argument("--no-tile-clipping", action="store_true")
+    parser.add_argument("--tile-histogram", action="store_true")
     args = parser.parse_args()
 
     called_once_args = {"--bam" : args.bam, "--depth" : args.depth, "--bed" : args.bed, "--fasta": args.fasta}
@@ -325,22 +337,23 @@ def main():
     args_fasta = called_once_args["--fasta"]
 
     if args_bed:
-        tiles = load_scheme(args_bed, args.no_window_clipping)
+        tiles = load_scheme(args_bed, args.no_tile_clipping)
     else:
         tiles = {}
 
     fields = []
     header = []
+    tile_hist = ""
 
     header_, fields_ = swell_from_fasta(args_fasta)
     header.extend(header_)
     fields.extend(fields_)
 
     if args_bam:
-       header_, fields_ = swell_from_bam(args_bam, tiles, args.ref, args.thresholds, min_pos=args.min_pos, min_pos_total_zero=args.min_pos_allow_total_zero)
+        tile_vector, header_, fields_ = swell_from_bam(args_bam, tiles, args.ref, args.thresholds, min_pos=args.min_pos, min_pos_total_zero=args.min_pos_allow_total_zero)
     elif args_depth:
-       header_, fields_ = swell_from_depth(args_depth, tiles, args.ref, args.thresholds, min_pos=args.min_pos, min_pos_total_zero=args.min_pos_allow_total_zero)
-
+        tile_vector, header_, fields_ = swell_from_depth(args_depth, tiles, args.ref, args.thresholds, min_pos=args.min_pos, min_pos_total_zero=args.min_pos_allow_total_zero)
+    
     header.extend(header_)
     fields.extend(fields_)
 
@@ -356,6 +369,10 @@ def main():
     print("\t".join(header))
     fields_s = [("%."+str(args.dp)+"f") % x if "float" in type(x).__name__ else str(x) for x in fields] # do not fucking @ me
     print("\t".join([str(x) for x in fields_s]))
+
+    if args.tile_histogram:
+        tile_hist = tile_histogram(tile_vector, tiles)
+        print(tile_hist)
 
 
 if __name__ == "__main__":
