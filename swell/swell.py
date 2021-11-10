@@ -4,8 +4,29 @@ import pysam
 import numpy as np
 import re
 
-def load_scheme(scheme_bed):
-    tiles_d = {}
+
+def clip_windows(l_tiles):
+    # iterate through tiles and clip
+    new_tiles = []
+    for tile_i0, tile_t in enumerate(l_tiles):
+        tile = dict(tile_t[2]) # copy the dict god this is gross stuff
+
+        # Clip the start of this window to the end of the last window
+        # (if there is a last window)
+        if (tile_i0 - 1) >= 0:
+            tile["inside_start"] = l_tiles[tile_i0 - 1][2]["end"]
+
+        # Clip the end of this window to the start of the next window
+        # (if there is a next window)
+        if (tile_i0 + 1) < len(l_tiles):
+            tile["inside_end"] = l_tiles[tile_i0 + 1][2]["start"]
+
+        new_tiles.append((tile_t[0], tile_t[1], tile))
+    return new_tiles
+
+
+def load_scheme(scheme_bed, clip=False):
+    tiles_dict = {}
     with open(scheme_bed) as scheme_fh:
         for line in scheme_fh:
             ref, start, end, tile, pool = line.strip().split()
@@ -14,8 +35,8 @@ def load_scheme(scheme_bed):
             start = int(start)
             end = int(end)
 
-            if tile not in tiles_d:
-                tiles_d[tile] = {
+            if tile not in tiles_dict:
+                tiles_dict[tile] = {
                     "start": -1,
                     "inside_start": -1,
                     "inside_end": -1,
@@ -23,28 +44,28 @@ def load_scheme(scheme_bed):
                 }
 
             if "LEFT" in side.upper():
-                if tiles_d[tile]["start"] == -1:
-                    tiles_d[tile]["start"] = start
-                    tiles_d[tile]["inside_start"] = end
+                if tiles_dict[tile]["start"] == -1:
+                    tiles_dict[tile]["start"] = start
+                    tiles_dict[tile]["inside_start"] = end
 
-                if start < tiles_d[tile]["start"]:
+                if start < tiles_dict[tile]["start"]:
                     # push the window region to the leftmost left position
-                    tiles_d[tile]["start"] = start
-                if end > tiles_d[tile]["inside_start"]:
+                    tiles_dict[tile]["start"] = start
+                if end > tiles_dict[tile]["inside_start"]:
                     # open the start of the inner window to the rightmost left position
-                    tiles_d[tile]["inside_start"] = end
+                    tiles_dict[tile]["inside_start"] = end
 
             elif "RIGHT" in side.upper():
-                if tiles_d[tile]["end"] == -1:
-                    tiles_d[tile]["end"] = end
-                    tiles_d[tile]["inside_end"] = start
+                if tiles_dict[tile]["end"] == -1:
+                    tiles_dict[tile]["end"] = end
+                    tiles_dict[tile]["inside_end"] = start
 
-                if end > tiles_d[tile]["end"]:
+                if end > tiles_dict[tile]["end"]:
                     # stretch the window out to the rightmost right position
-                    tiles_d[tile]["end"] = end
-                if start < tiles_d[tile]["inside_end"]:
+                    tiles_dict[tile]["end"] = end
+                if start < tiles_dict[tile]["inside_end"]:
                     # close the end of the inner window to the leftmost right position
-                    tiles_d[tile]["inside_end"] = start
+                    tiles_dict[tile]["inside_end"] = start
 
         l_tiles = []
         tiles_seen = set([])
@@ -52,31 +73,19 @@ def load_scheme(scheme_bed):
         for line in scheme_fh:
             ref, start, end, tile, pool = line.strip().split()
             scheme, tile, side = tile.split("_", 2)
-            tile_tup = (scheme, tile, tiles_d[tile])
-            if tiles_d[tile]["inside_start"] != -1 and tiles_d[tile]["inside_end"] != -1 and tile not in tiles_seen:
+            tile_tup = (scheme, tile, tiles_dict[tile])
+            if tiles_dict[tile]["inside_start"] != -1 and tiles_dict[tile]["inside_end"] != -1 and tile not in tiles_seen:
                 l_tiles.append(tile_tup)
                 tiles_seen.add(tile)
 
         l_tiles = sorted(l_tiles, key=lambda x: int(x[1])) # sort by tile number
-
-        # iterate through tiles and clip
-        new_tiles = []
-        for tile_i0, tile_t in enumerate(l_tiles):
-            tile = dict(tile_t[2]) # copy the dict god this is gross stuff
-
-            # Clip the start of this window to the end of the last window
-            # (if there is a last window)
-            if (tile_i0 - 1) >= 0:
-                tile["inside_start"] = l_tiles[tile_i0 - 1][2]["end"]
-
-            # Clip the end of this window to the start of the next window
-            # (if there is a next window)
-            if (tile_i0 + 1) < len(l_tiles):
-                tile["inside_end"] = l_tiles[tile_i0 + 1][2]["start"]
-
-            new_tiles.append((tile_t[0], tile_t[1], tile))
+        if clip:
+            new_tiles = clip_windows(l_tiles)
+        else:
+            new_tiles = l_tiles
 
     return new_tiles
+
 
 def swell_from_fasta(fasta_path):
     num_seqs = 0
@@ -169,6 +178,7 @@ def swell_from_depth_iter(depth_iterable, depth_path, tiles, genomes, thresholds
     if tiles:
         tile_starts = [t[2]["inside_start"] for t in tiles] # dont use -1 for 1-pos depth files
         tile_ends = [t[2]["inside_end"] for t in tiles]
+
         closest_cursor = min(tile_starts)
 
         stat_tiles = [0 for t in tiles]
@@ -213,7 +223,7 @@ def swell_from_depth_iter(depth_iterable, depth_path, tiles, genomes, thresholds
 
                 if tile_ends[t_i] <= pos:
                     stat_tiles[t_i] = -1
-
+    
     tile_vector = []
     for t_i, (scheme_name, tile_num, tile) in enumerate(tiles):
         len_win = len(tile_dat[t_i])
@@ -292,11 +302,12 @@ def main():
     parser.add_argument("--min-pos", type=int, required=False)
     parser.add_argument("--min-pos-allow-total-zero", action="store_true")
     parser.add_argument("-x", action="append", nargs=2, metavar=("key", "value",))
+    parser.add_argument("--clip-windows", action="store_true")
 
     args = parser.parse_args()
 
     if args.bed:
-        tiles = load_scheme(args.bed)
+        tiles = load_scheme(args.bed, args.clip_windows)
     else:
         tiles = {}
 
@@ -317,7 +328,6 @@ def main():
 
     keys = []
     values = []
-    # if hasattr(args, "x"):
     if args.x:
         for meta in args.x:
             keys.append(meta[0])
@@ -328,6 +338,7 @@ def main():
     print("\t".join(header))
     fields_s = [("%."+str(args.dp)+"f") % x if "float" in type(x).__name__ else str(x) for x in fields] # do not fucking @ me
     print("\t".join([str(x) for x in fields_s]))
+
 
 if __name__ == "__main__":
     main()
