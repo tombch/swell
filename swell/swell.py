@@ -298,7 +298,6 @@ class ArgThrowingArgumentParser(argparse.ArgumentParser):
 
 
 def main():
-    import argparse
     parser = ArgThrowingArgumentParser()
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--bam", nargs=1, action='append') # bam file
@@ -312,8 +311,8 @@ def main():
     parser.add_argument("--min-pos-allow-total-zero", action="store_true")
     parser.add_argument("-x", action="append", nargs=2, metavar=("key", "value",))
     parser.add_argument("--no-window-clipping", action="store_true")
-
     args = parser.parse_args()
+
     called_once_args = {"--bam" : args.bam, "--depth" : args.depth, "--bed" : args.bed, "--fasta": args.fasta}
     for k in called_once_args.keys():
         if called_once_args[k] and len(called_once_args[k]) > 1:
