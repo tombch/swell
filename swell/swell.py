@@ -117,15 +117,16 @@ def swell_from_fasta(fasta_path):
                     num_bases += 1
                     gap = 1
 
-                    if base.upper() in ['A', 'C', 'G', 'T']:
+                    if base.upper() in 'ACGT':
                         num_acgt += 1
                         gap = 0
-                    elif base.upper() in ['N']:
+                    elif base.upper() in 'NX':
                         num_masked += 1
-                    elif base.upper() in ['X', '-', '_', ' ']:
-                        num_invalid += 1
                     elif base.upper() in 'WSMKRYBDHV':
                         num_ambiguous += 1
+                        gap = 0
+                    else:
+                        num_invalid += 1
 
                     if gap:
                         if curr_ungap_len > 0:
