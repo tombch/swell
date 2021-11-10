@@ -25,64 +25,64 @@ def clip_windows(l_tiles):
     return new_tiles
 
 
-def load_scheme(scheme_bed, clip=False):
+def load_scheme(scheme_bed, no_clip=False):
     tiles_dict = {}
-    with open(scheme_bed) as scheme_fh:
-        for line in scheme_fh:
-            ref, start, end, tile, pool = line.strip().split()
-            scheme, tile, side = tile.split("_", 2)
+    scheme_fh = open(scheme_bed)
+    for line in scheme_fh:
+        ref, start, end, tile, pool = line.strip().split()
+        scheme, tile, side = tile.split("_", 2)
 
-            start = int(start)
-            end = int(end)
+        start = int(start)
+        end = int(end)
 
-            if tile not in tiles_dict:
-                tiles_dict[tile] = {
-                    "start": -1,
-                    "inside_start": -1,
-                    "inside_end": -1,
-                    "end": -1,
-                }
+        if tile not in tiles_dict:
+            tiles_dict[tile] = {
+                "start": -1,
+                "inside_start": -1,
+                "inside_end": -1,
+                "end": -1,
+            }
 
-            if "LEFT" in side.upper():
-                if tiles_dict[tile]["start"] == -1:
-                    tiles_dict[tile]["start"] = start
-                    tiles_dict[tile]["inside_start"] = end
+        if "LEFT" in side.upper():
+            if tiles_dict[tile]["start"] == -1:
+                tiles_dict[tile]["start"] = start
+                tiles_dict[tile]["inside_start"] = end
 
-                if start < tiles_dict[tile]["start"]:
-                    # push the window region to the leftmost left position
-                    tiles_dict[tile]["start"] = start
-                if end > tiles_dict[tile]["inside_start"]:
-                    # open the start of the inner window to the rightmost left position
-                    tiles_dict[tile]["inside_start"] = end
+            if start < tiles_dict[tile]["start"]:
+                # push the window region to the leftmost left position
+                tiles_dict[tile]["start"] = start
+            if end > tiles_dict[tile]["inside_start"]:
+                # open the start of the inner window to the rightmost left position
+                tiles_dict[tile]["inside_start"] = end
 
-            elif "RIGHT" in side.upper():
-                if tiles_dict[tile]["end"] == -1:
-                    tiles_dict[tile]["end"] = end
-                    tiles_dict[tile]["inside_end"] = start
+        elif "RIGHT" in side.upper():
+            if tiles_dict[tile]["end"] == -1:
+                tiles_dict[tile]["end"] = end
+                tiles_dict[tile]["inside_end"] = start
 
-                if end > tiles_dict[tile]["end"]:
-                    # stretch the window out to the rightmost right position
-                    tiles_dict[tile]["end"] = end
-                if start < tiles_dict[tile]["inside_end"]:
-                    # close the end of the inner window to the leftmost right position
-                    tiles_dict[tile]["inside_end"] = start
+            if end > tiles_dict[tile]["end"]:
+                # stretch the window out to the rightmost right position
+                tiles_dict[tile]["end"] = end
+            if start < tiles_dict[tile]["inside_end"]:
+                # close the end of the inner window to the leftmost right position
+                tiles_dict[tile]["inside_end"] = start
 
-        l_tiles = []
-        tiles_seen = set([])
-        scheme_fh.seek(0)
-        for line in scheme_fh:
-            ref, start, end, tile, pool = line.strip().split()
-            scheme, tile, side = tile.split("_", 2)
-            tile_tup = (scheme, tile, tiles_dict[tile])
-            if tiles_dict[tile]["inside_start"] != -1 and tiles_dict[tile]["inside_end"] != -1 and tile not in tiles_seen:
-                l_tiles.append(tile_tup)
-                tiles_seen.add(tile)
+    l_tiles = []
+    tiles_seen = set([])
+    scheme_fh.seek(0)
+    for line in scheme_fh:
+        ref, start, end, tile, pool = line.strip().split()
+        scheme, tile, side = tile.split("_", 2)
+        tile_tup = (scheme, tile, tiles_dict[tile])
+        if tiles_dict[tile]["inside_start"] != -1 and tiles_dict[tile]["inside_end"] != -1 and tile not in tiles_seen:
+            l_tiles.append(tile_tup)
+            tiles_seen.add(tile)
 
-        l_tiles = sorted(l_tiles, key=lambda x: int(x[1])) # sort by tile number
-        if clip:
-            new_tiles = clip_windows(l_tiles)
-        else:
-            new_tiles = l_tiles
+    l_tiles = sorted(l_tiles, key=lambda x: int(x[1])) # sort by tile number
+    if not no_clip:
+        new_tiles = clip_windows(l_tiles)
+    else:
+        new_tiles = l_tiles
 
     return new_tiles
 
@@ -109,58 +109,57 @@ def swell_from_fasta(fasta_path):
 
     if fasta_path:
         import readfq # thanks heng
-        with open(fasta_path) as fasta_fh:
-            heng_iter = readfq.readfq(fasta_fh)
-            for name, seq, qual in heng_iter:
-                num_seqs += 1
-                for base in seq:
-                    num_bases += 1
-                    gap = 1
+        heng_iter = readfq.readfq(open(fasta_path))
+        for name, seq, qual in heng_iter:
+            num_seqs += 1
+            for base in seq:
+                num_bases += 1
+                gap = 1
 
-                    if base.upper() in 'ACGT':
-                        num_acgt += 1
-                        gap = 0
-                    elif base.upper() in 'NX':
-                        num_masked += 1
-                    elif base.upper() in 'WSMKRYBDHV':
-                        num_ambiguous += 1
-                        gap = 0
-                    else:
-                        num_invalid += 1
-
-                    if gap:
-                        if curr_ungap_len > 0:
-                            n_ungaps.append(curr_ungap_len)
-                            curr_ungap_len = 0
-                        curr_gap_len += 1
-                    elif not gap:
-                        if curr_gap_len > 0:
-                            n_gaps.append(curr_gap_len)
-                            curr_gap_len = 0
-                        curr_ungap_len += 1
-
-            if curr_gap_len > 0:
-                n_gaps.append(curr_gap_len)
-            elif curr_ungap_len > 0:
-                n_gaps.append(curr_ungap_len)
-
-            if num_bases > 0:
-                prop_acgt = num_acgt / num_bases * 100.0
-                prop_masked = num_masked / num_bases * 100.0
-                prop_invalid = num_invalid / num_bases * 100.0
-                prop_ambiguous = num_ambiguous / num_bases * 100.0
-
-                if len(n_gaps) > 0:
-                    max_gap = max(n_gaps)
+                if base.upper() in 'ACGT':
+                    num_acgt += 1
+                    gap = 0
+                elif base.upper() in 'NX':
+                    num_masked += 1
+                elif base.upper() in 'WSMKRYBDHV':
+                    num_ambiguous += 1
+                    gap = 0
                 else:
-                    max_gap = 0
+                    num_invalid += 1
 
-                if len(n_ungaps) > 0:
-                    max_ungap = max(n_ungaps)
-                else:
-                    max_ungap = 0
+                if gap:
+                    if curr_ungap_len > 0:
+                        n_ungaps.append(curr_ungap_len)
+                        curr_ungap_len = 0
+                    curr_gap_len += 1
+                elif not gap:
+                    if curr_gap_len > 0:
+                        n_gaps.append(curr_gap_len)
+                        curr_gap_len = 0
+                    curr_ungap_len += 1
+
+        if curr_gap_len > 0:
+            n_gaps.append(curr_gap_len)
+        elif curr_ungap_len > 0:
+            n_gaps.append(curr_ungap_len)
+
+        if num_bases > 0:
+            prop_acgt = num_acgt / num_bases * 100.0
+            prop_masked = num_masked / num_bases * 100.0
+            prop_invalid = num_invalid / num_bases * 100.0
+            prop_ambiguous = num_ambiguous / num_bases * 100.0
+
+            if len(n_gaps) > 0:
+                max_gap = max(n_gaps)
             else:
-                prop_invalid = 100.0
+                max_gap = 0
+
+            if len(n_ungaps) > 0:
+                max_ungap = max(n_ungaps)
+            else:
+                max_ungap = 0
+        else:
+            prop_invalid = 100.0
 
     return ["fasta_path", "num_seqs", "num_bases", "pc_acgt", "pc_masked", "pc_invalid", "pc_ambiguous", "longest_gap", "longest_ungap"], [fasta_path, num_seqs, num_bases, prop_acgt, prop_masked, prop_invalid, prop_ambiguous, max_gap, max_ungap]
 
@@ -237,8 +236,8 @@ def swell_from_depth_iter(depth_iterable, depth_path, tiles, genomes, thresholds
         for threshold in threshold_counters:
             if median_cov >= threshold:
                 tile_threshold_counters[threshold] += 1
+        # print(depth_path, tile_num, tile[0], tile[1], scheme_name, mean_cov, median_cov, len_win)
 
-        #print(depth_path, tile_num, tile[0], tile[1], scheme_name, mean_cov, median_cov, len_win)
     if min_pos:
         if n_positions < min_pos:
             if min_pos_total_zero and n_lines == 0:
@@ -267,8 +266,8 @@ def swell_from_depth_iter(depth_iterable, depth_path, tiles, genomes, thresholds
 
 
 def swell_from_depth(depth_path, tiles, genomes, thresholds, min_pos=None, min_pos_total_zero=False):
-    with open(depth_path) as depth_fh:
-        return swell_from_depth_iter(depth_fh, depth_path, tiles, genomes, thresholds, min_pos=None, min_pos_total_zero=False)
+    depth_fh = open(depth_path)
+    return swell_from_depth_iter(depth_fh, depth_path, tiles, genomes, thresholds, min_pos=None, min_pos_total_zero=False)
 
 
 def swell_from_bam(bam_path, tiles, genomes, thresholds, min_pos=None, min_pos_total_zero=False):
@@ -289,40 +288,59 @@ def swell_from_bam(bam_path, tiles, genomes, thresholds, min_pos=None, min_pos_t
 #        print(bam_path, tile_num, tile[0], tile[1], scheme_name, mean_cov, median_cov)
 
 
+class ArgumentParserError(Exception):
+    pass
+
+
+class ArgThrowingArgumentParser(argparse.ArgumentParser):
+    def error(self, message):
+        raise ArgumentParserError(message)
+
+
 def main():
     import argparse
-    parser = argparse.ArgumentParser()
+    parser = ArgThrowingArgumentParser()
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("--bam") # bam file
-    group.add_argument("--depth") # depth file produced from bam via samtools
+    group.add_argument("--bam", nargs=1, action='append') # bam file
+    group.add_argument("--depth", nargs=1, action='append') # depth file produced from bam via samtools
+    parser.add_argument("--bed", nargs=1, action='append', required=False)
+    parser.add_argument("--fasta", nargs=1, action='append', required=False)
     parser.add_argument("--ref", required=True, nargs='+') # sequence name
     parser.add_argument("--thresholds", action='append', type=int, nargs='+', default=[1, 5, 10, 20, 50, 100, 200])
-    parser.add_argument("--bed", required=False)
-    parser.add_argument("--fasta", required=False)
     parser.add_argument("--dp", default=2, type=int, required=False)
     parser.add_argument("--min-pos", type=int, required=False)
     parser.add_argument("--min-pos-allow-total-zero", action="store_true")
     parser.add_argument("-x", action="append", nargs=2, metavar=("key", "value",))
-    parser.add_argument("--clip-windows", action="store_true")
+    parser.add_argument("--no-window-clipping", action="store_true")
 
     args = parser.parse_args()
+    called_once_args = {"--bam" : args.bam, "--depth" : args.depth, "--bed" : args.bed, "--fasta": args.fasta}
+    for k in called_once_args.keys():
+        if called_once_args[k] and len(called_once_args[k]) > 1:
+            raise ArgumentParserError(f"{k} can only be specified once")
+        elif called_once_args[k] and len(called_once_args[k]) == 1:
+            called_once_args[k] = called_once_args[k][0][0]
+    args_bam = called_once_args["--bam"]
+    args_depth = called_once_args["--depth"]
+    args_bed = called_once_args["--bed"]
+    args_fasta = called_once_args["--fasta"]
 
-    if args.bed:
-        tiles = load_scheme(args.bed, args.clip_windows)
+    if args_bed:
+        tiles = load_scheme(args_bed, args.no_window_clipping)
     else:
         tiles = {}
 
     fields = []
     header = []
 
-    header_, fields_ = swell_from_fasta(args.fasta)
+    header_, fields_ = swell_from_fasta(args_fasta)
     header.extend(header_)
     fields.extend(fields_)
 
-    if args.bam:
-       header_, fields_ = swell_from_bam(args.bam, tiles, args.ref, args.thresholds, min_pos=args.min_pos, min_pos_total_zero=args.min_pos_allow_total_zero)
-    elif args.depth:
-       header_, fields_ = swell_from_depth(args.depth, tiles, args.ref, args.thresholds, min_pos=args.min_pos, min_pos_total_zero=args.min_pos_allow_total_zero)
+    if args_bam:
+       header_, fields_ = swell_from_bam(args_bam, tiles, args.ref, args.thresholds, min_pos=args.min_pos, min_pos_total_zero=args.min_pos_allow_total_zero)
+    elif args_depth:
+       header_, fields_ = swell_from_depth(args_depth, tiles, args.ref, args.thresholds, min_pos=args.min_pos, min_pos_total_zero=args.min_pos_allow_total_zero)
 
     header.extend(header_)
     fields.extend(fields_)
