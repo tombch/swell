@@ -5,23 +5,23 @@ import numpy as np
 import re
 
 
-def clip_tiles(l_tiles):
+def clip_tiles(tiles):
     # iterate through tiles and clip
     new_tiles = []
-    for tile_i0, tile_t in enumerate(l_tiles):
-        tile = dict(tile_t[2]) # copy the dict god this is gross stuff
+    for tile_index, tile_tuple in enumerate(tiles):
+        tile_dict = dict(tile_tuple[2]) # copy the dict god this is gross stuff
 
         # Clip the start of this window to the end of the last window
         # (if there is a last window)
-        if (tile_i0 - 1) >= 0:
-            tile["inside_start"] = l_tiles[tile_i0 - 1][2]["end"]
+        if tile_index > 0:
+            tile_dict["inside_start"] = tiles[tile_index - 1][2]["end"]
 
         # Clip the end of this window to the start of the next window
         # (if there is a next window)
-        if (tile_i0 + 1) < len(l_tiles):
-            tile["inside_end"] = l_tiles[tile_i0 + 1][2]["start"]
+        if tile_index < len(tiles) - 1:
+            tile_dict["inside_end"] = tiles[tile_index + 1][2]["start"]
 
-        new_tiles.append((tile_t[0], tile_t[1], tile))
+        new_tiles.append((tile_tuple[0], tile_tuple[1], tile_dict))
     return new_tiles
 
 
@@ -66,8 +66,8 @@ def load_scheme(scheme_bed, no_clip=False):
             if start < tiles_dict[tile]["inside_end"]:
                 # close the end of the inner window to the leftmost right position
                 tiles_dict[tile]["inside_end"] = start
-
-    l_tiles = []
+    
+    tiles_list = []
     tiles_seen = set([])
     scheme_fh.seek(0)
     for line in scheme_fh:
@@ -75,14 +75,15 @@ def load_scheme(scheme_bed, no_clip=False):
         scheme, tile, side = tile.split("_", 2)
         tile_tup = (scheme, tile, tiles_dict[tile])
         if tiles_dict[tile]["inside_start"] != -1 and tiles_dict[tile]["inside_end"] != -1 and tile not in tiles_seen:
-            l_tiles.append(tile_tup)
+            tiles_list.append(tile_tup)
             tiles_seen.add(tile)
 
-    l_tiles = sorted(l_tiles, key=lambda x: int(x[1])) # sort by tile number
+    tiles_list = sorted(tiles_list, key=lambda x: int(x[1])) # sort by tile number
+    # Clips by default
     if not no_clip:
-        new_tiles = clip_tiles(l_tiles)
+        new_tiles = clip_tiles(tiles_list)
     else:
-        new_tiles = l_tiles
+        new_tiles = tiles_list
 
     return new_tiles
 
@@ -182,7 +183,7 @@ def swell_from_depth_iter(depth_iterable, depth_path, tiles, genomes, thresholds
         closest_cursor = min(tile_starts)
 
         stat_tiles = [0 for t in tiles]
-        tile_dat = [[] for t in tiles]
+        tile_data = [[] for t in tiles]
 
     n_lines = 0
     for line in depth_iterable:
@@ -204,10 +205,13 @@ def swell_from_depth_iter(depth_iterable, depth_path, tiles, genomes, thresholds
             # Check for new open tiles
             if pos >= closest_cursor:
                 for t_i, t_start in enumerate(tile_starts):
-                    if pos >= t_start and stat_tiles[t_i] == 0:
-                        stat_tiles[t_i] = 1
+                    # If we are in the region of tile t_i and the tile is previously unvisited
+                    if pos >= t_start and stat_tiles[t_i] == 0: 
+                        # Change the state of tile t_i to open
+                        stat_tiles[t_i] = 1 
 
                 next_possible_min = []
+                # Get the minimum tile start out of the remaining unvisited tiles 
                 for t_i, t_start in enumerate(tile_starts):
                     if stat_tiles[t_i] == 0:
                         next_possible_min.append(t_start)
@@ -218,18 +222,20 @@ def swell_from_depth_iter(depth_iterable, depth_path, tiles, genomes, thresholds
 
             # Handle open tiles
             for t_i, t_state in enumerate(stat_tiles):
+                # If tile t_i is open, append the current coverage/depth value to t_i's list of coverages
                 if t_state == 1:
-                    tile_dat[t_i].append(cov)
-
+                    tile_data[t_i].append(cov)
+                # If our current position is at the end of t_i
                 if tile_ends[t_i] <= pos:
-                    stat_tiles[t_i] = -1
-    
+                    # Mark tile t_i as closed
+                    stat_tiles[t_i] = -1 
+
     tile_vector = []
     for t_i, (scheme_name, tile_num, tile) in enumerate(tiles):
-        len_win = len(tile_dat[t_i])
-        mean_cov = np.mean(tile_dat[t_i])
-        median_cov = np.median(tile_dat[t_i])
-
+        len_win = len(tile_data[t_i])
+        mean_cov = np.mean(tile_data[t_i])
+        median_cov = np.median(tile_data[t_i])
+        
         tile_vector.append(median_cov)
 
         # Count tile means above threshold
@@ -288,28 +294,28 @@ def swell_from_bam(bam_path, tiles, genomes, thresholds, min_pos=None, min_pos_t
 #        print(bam_path, tile_num, tile[0], tile[1], scheme_name, mean_cov, median_cov)
 
 
-def tile_histogram(tile_vector, tiles):
-    histogram_string = "TILE\tSTART\tEND\tMEDIAN\n\t\t\tDEPTH\n"
+def tile_depth_graph(tile_vector, tiles):
+    depth_graph_string = "TILE\tSTART\tEND\tMEDIAN\nNUM\tPOS\tPOS\tDEPTH\n"
     if len(tile_vector) > 0:
         for i in range(len(tile_vector)):
             # tiles are sorted
-            histogram_string += f"{i+1}\t{tiles[i][2]['inside_start']}\t{tiles[i][2]['inside_end']}\t{int(round(tile_vector[i]))}\t{'='*int(round(0.01*tile_vector[i]))}\n"
+            depth_graph_string += f"{i+1}\t{tiles[i][2]['inside_start']}\t{tiles[i][2]['inside_end']}\t{int(round(tile_vector[i]))}\t{'='*int(round(0.01*tile_vector[i]))}\n"
     else:
-        histogram_string += f"{None}\t{None}\t{None}\t{None}\n"
-    return histogram_string[:-1]
+        depth_graph_string += f"{None}\t{None}\t{None}\t{None}\n"
+    return depth_graph_string[:-1]
 
 
 class ArgumentParserError(Exception):
     pass
 
 
-class ArgThrowingArgumentParser(argparse.ArgumentParser):
+class ErrorThrowingArgParser(argparse.ArgumentParser):
     def error(self, message):
         raise ArgumentParserError(message)
 
 
 def main():
-    parser = ArgThrowingArgumentParser()
+    parser = ErrorThrowingArgParser()
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--bam", nargs=1, action='append') # bam file
     group.add_argument("--depth", nargs=1, action='append') # depth file produced from bam via samtools
@@ -322,7 +328,7 @@ def main():
     parser.add_argument("--min-pos-allow-total-zero", action="store_true")
     parser.add_argument("-x", action="append", nargs=2, metavar=("key", "value",))
     parser.add_argument("--no-tile-clipping", action="store_true")
-    parser.add_argument("--tile-histogram", action="store_true")
+    parser.add_argument("--tile-depth-graph", action="store_true")
     args = parser.parse_args()
 
     called_once_args = {"--bam" : args.bam, "--depth" : args.depth, "--bed" : args.bed, "--fasta": args.fasta}
@@ -343,7 +349,7 @@ def main():
 
     fields = []
     header = []
-    tile_hist = ""
+    graph = ""
 
     header_, fields_ = swell_from_fasta(args_fasta)
     header.extend(header_)
@@ -370,9 +376,9 @@ def main():
     fields_s = [("%."+str(args.dp)+"f") % x if "float" in type(x).__name__ else str(x) for x in fields] # do not fucking @ me
     print("\t".join([str(x) for x in fields_s]))
 
-    if args.tile_histogram:
-        tile_hist = tile_histogram(tile_vector, tiles)
-        print(tile_hist)
+    if args.tile_depth_graph:
+        graph = tile_depth_graph(tile_vector, tiles)
+        print(graph)
 
 
 if __name__ == "__main__":
