@@ -110,7 +110,7 @@ def swell_from_fasta(fasta_path):
     max_ungap = 0
 
     if fasta_path:
-        import readfq # thanks heng
+        from . import readfq # thanks heng
         heng_iter = readfq.readfq(open(fasta_path))
         for name, seq, qual in heng_iter:
             num_seqs += 1
