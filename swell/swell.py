@@ -3,6 +3,7 @@ import sys
 import pysam
 import numpy as np
 import re
+import math
 
 
 def clip_tiles(tiles):
@@ -294,27 +295,54 @@ def swell_from_bam(bam_path, tiles, genomes, thresholds, min_pos=None, min_pos_t
 #        print(bam_path, tile_num, tile[0], tile[1], scheme_name, mean_cov, median_cov)
 
 
-def tile_depth_graph(tile_vector, tiles):
-    depth_graph_string = "TILE\tSTART\tEND\tMEDIAN\nNUM\tPOS\tPOS\tDEPTH\n"
-    if len(tile_vector) > 0:
-        for i in range(len(tile_vector)):
-            # tiles are sorted
-            depth_graph_string += f"{i+1}\t{tiles[i][2]['inside_start']}\t{tiles[i][2]['inside_end']}\t{int(round(tile_vector[i]))}\t{'='*int(round(0.01*tile_vector[i]))}\n"
+def scaled_bars(data):  
+    max_val = int(max(data))
+    marker = int('1' + '0'*(len(str(max_val))-1))
+    space_increment = 10
+    scale = "0" + " "*(space_increment - 1)
+    for i in range(1, max_val):
+        if i % marker == 0:
+            i_str = str(i)
+            i_len = len(i_str)
+            scale += i_str + " "*(space_increment - i_len)
+    bars_list = []
+    for i in range(len(data)):
+        bars_list.append(f"|{'='*int(space_increment*data[i]/marker)}")
+    return bars_list, scale
+
+
+def tile_depth_graph(tile_vector, tiles, show_values_on_right=False):
+    bars_list, scale = scaled_bars(tile_vector)
+    if show_values_on_right:
+        depth_graph_string = f"TILE\tSTART\tEND\tMEDIAN DEPTH\nNUM\tPOS\tPOS\t{scale}\n"
     else:
-        depth_graph_string += f"{None}\t{None}\t{None}\t{None}\n"
+        depth_graph_string = f"TILE\tSTART\tEND\tMEDIAN\nNUM\tPOS\tPOS\tDEPTH\t{scale}\n"
+    # Tiles are already sorted
+    for i in range(len(tile_vector)):
+        if show_values_on_right:
+            depth_graph_string += f"{i+1}\t{tiles[i][2]['inside_start']}\t{tiles[i][2]['inside_end']}\t{bars_list[i]}{' ' if len(bars_list[i]) > 1 else ''}{int(round(tile_vector[i]))}\n"
+        else:
+            depth_graph_string += f"{i+1}\t{tiles[i][2]['inside_start']}\t{tiles[i][2]['inside_end']}\t{int(round(tile_vector[i]))}\t{bars_list[i]}\n"
     return depth_graph_string[:-1]
 
 
-def tile_histogram(tile_vector):
-    import math
-    histogram_string = "FROM\tTO\tNUM\nDEPTH\tDEPTH\tTILES\n"
+def tile_histogram(tile_vector, show_values_on_right=False):
     depth_markers = [0, 10, 100, 1000, 10000, 100000, math.inf]
     hist_freqs = [0 for i in range(len(depth_markers) - 1)]
     for i in range(len(hist_freqs)):
         for depth in tile_vector:
             if depth_markers[i] <= depth < depth_markers[i + 1]:
                 hist_freqs[i] += 1
-        histogram_string += f"{depth_markers[i]}\t{depth_markers[i+1]-1}\t{hist_freqs[i]}\t{'='*hist_freqs[i]}\n"
+    bars_list, scale = scaled_bars(hist_freqs)
+    if show_values_on_right:
+        histogram_string = f"FROM\tTO\tNUM TILES\nDEPTH\tDEPTH\t{scale}\n"
+    else:
+        histogram_string = f"FROM\tTO\tNUM\nDEPTH\tDEPTH\tTILES\t{scale}\n"
+    for i in range(len(hist_freqs)):
+        if show_values_on_right:
+            histogram_string += f"{depth_markers[i]}\t{depth_markers[i+1]-1}\t{bars_list[i]}{' ' if len(bars_list[i]) > 1 else ''}{round(hist_freqs[i], 2)}\n"
+        else:
+            histogram_string += f"{depth_markers[i]}\t{depth_markers[i+1]-1}\t{round(hist_freqs[i], 2)}\t{bars_list[i]}\n"
     return histogram_string[:-1]
 
 

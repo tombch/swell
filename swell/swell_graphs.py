@@ -26,15 +26,12 @@ def tile_depth_graph(tile_vector, show_values_on_right=False):
         depth_graph_string = f"TILE\tMEDIAN DEPTH\nNUM\t{scale}\n"
     else:
         depth_graph_string = f"TILE\tMEDIAN\nNUM\tDEPTH\t{scale}\n"
-    if len(tile_vector) > 0:
-        for i in range(len(tile_vector)):
-            # tiles are sorted
-            if show_values_on_right:
-                depth_graph_string += f"{i+1}\t{bars_list[i]}{' ' if len(bars_list[i]) > 1 else ''}{int(round(tile_vector[i]))}\n"
-            else:
-                depth_graph_string += f"{i+1}\t{int(round(tile_vector[i]))}\t{bars_list[i]}\n"
-    else:
-        depth_graph_string += f"{None}\t{None}\n"
+    # Tiles are already sorted
+    for i in range(len(tile_vector)):
+        if show_values_on_right:
+            depth_graph_string += f"{i+1}\t{bars_list[i]}{' ' if len(bars_list[i]) > 1 else ''}{int(round(tile_vector[i]))}\n"
+        else:
+            depth_graph_string += f"{i+1}\t{int(round(tile_vector[i]))}\t{bars_list[i]}\n"
     return depth_graph_string[:-1]
 
 
