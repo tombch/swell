@@ -7,12 +7,12 @@ def scaled_bars(data):
     max_val = int(max(data))
     marker = int('1' + '0'*(len(str(max_val))-1))
     space_increment = 10
-    scale = "0" + " "*(space_increment - 1)
-    for i in range(1, max_val):
-        if i % marker == 0:
-            i_str = str(i)
-            i_len = len(i_str)
-            scale += i_str + " "*(space_increment - i_len)
+    # scale = "0" + " "*(space_increment - 1)
+    # for i in range(1, max_val):
+    #     if i % marker == 0:
+    #         i_str = str(i)
+    #         i_len = len(i_str)
+    #         scale += i_str + " "*(space_increment - i_len)
     bars_list = []
     for i in range(len(data)):
         bars_list.append(f"{'='*int(space_increment*data[i]/marker)}")
