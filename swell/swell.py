@@ -305,6 +305,19 @@ def tile_depth_graph(tile_vector, tiles):
     return depth_graph_string[:-1]
 
 
+def tile_histogram(tile_vector):
+    import math
+    histogram_string = "FROM\tTO\tNUM\nDEPTH\tDEPTH\tTILES\n"
+    depth_markers = [0, 10, 100, 1000, 10000, 100000, math.inf]
+    hist_freqs = [0 for i in range(len(depth_markers) - 1)]
+    for i in range(len(hist_freqs)):
+        for depth in tile_vector:
+            if depth_markers[i] <= depth < depth_markers[i + 1]:
+                hist_freqs[i] += 1
+        histogram_string += f"{depth_markers[i]}\t{depth_markers[i+1]-1}\t{hist_freqs[i]}\t{'='*hist_freqs[i]}\n"
+    return histogram_string[:-1]
+
+
 class ArgumentParserError(Exception):
     pass
 
@@ -329,6 +342,7 @@ def main():
     parser.add_argument("-x", action="append", nargs=2, metavar=("key", "value",))
     parser.add_argument("--no-tile-clipping", action="store_true")
     parser.add_argument("--tile-depth-graph", action="store_true")
+    parser.add_argument("--tile-histogram", action="store_true")
     args = parser.parse_args()
 
     called_once_args = {"--bam" : args.bam, "--depth" : args.depth, "--bed" : args.bed, "--fasta": args.fasta}
@@ -349,7 +363,6 @@ def main():
 
     fields = []
     header = []
-    graph = ""
 
     header_, fields_ = swell_from_fasta(args_fasta)
     header.extend(header_)
@@ -376,10 +389,15 @@ def main():
     fields_s = [("%."+str(args.dp)+"f") % x if "float" in type(x).__name__ else str(x) for x in fields] # do not fucking @ me
     print("\t".join([str(x) for x in fields_s]))
 
+    graph = ""
     if args.tile_depth_graph:
         graph = tile_depth_graph(tile_vector, tiles)
         print(graph)
-
+    
+    histogram = ""
+    if args.tile_histogram:
+        histogram = tile_histogram(tile_vector)
+        print(histogram)
 
 if __name__ == "__main__":
     main()
