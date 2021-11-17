@@ -26,7 +26,7 @@ def test_swell_from_fasta():
 
 def test_swell_from_depth():
     new_tiles = swell.load_scheme(bed_path)
-    new_tile_vector, new_header, new_fields = swell.swell_from_depth(depth_path, new_tiles, ref, thresholds) 
+    new_header, new_fields = swell.swell_from_depth(depth_path, new_tiles, ref, thresholds) 
     old_tiles = old_swell.load_scheme(bed_path)
     old_header, old_fields = old_swell.swell_from_depth(depth_path, old_tiles, ref, thresholds)
     assert new_header == old_header and new_fields == old_fields
@@ -34,7 +34,7 @@ def test_swell_from_depth():
 
 def test_swell_from_bam():
     new_tiles = swell.load_scheme(bed_path)
-    new_tile_vector, new_header, new_fields = swell.swell_from_bam(bam_path, new_tiles, ref, thresholds) 
+    new_header, new_fields = swell.swell_from_bam(bam_path, new_tiles, ref, thresholds) 
     old_tiles = old_swell.load_scheme(bed_path)
     old_header, old_fields = old_swell.swell_from_depth(depth_path, old_tiles, ref, thresholds)
     assert new_header == old_header and new_fields == old_fields

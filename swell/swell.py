@@ -4,6 +4,7 @@ import pysam
 import numpy as np
 import re
 import math
+from . import readfq # thanks heng
 
 
 def clip_tiles(tiles):
@@ -110,7 +111,6 @@ def swell_from_fasta(fasta_path):
     max_ungap = 0
 
     if fasta_path:
-        from . import readfq # thanks heng
         heng_iter = readfq.readfq(open(fasta_path))
         for name, seq, qual in heng_iter:
             num_seqs += 1
@@ -269,7 +269,7 @@ def swell_from_depth_iter(depth_iterable, depth_path, tiles, genomes, thresholds
     else:
         tile_vector_str = ",".join(["%.2f" % x for x in tile_vector])
 
-    return tile_vector, ["bam_path", "num_pos", "mean_cov"] + ["pc_pos_cov_gte%d" % x for x in sorted(thresholds)] + ["pc_tiles_medcov_gte%d" % x for x in sorted(thresholds)] + ["tile_n", "tile_vector"], [depth_path.replace(".depth", ""), n_positions, avg_cov] + threshold_counts_prop + tile_threshold_counts_prop + [len(tile_vector), tile_vector_str]
+    return ["bam_path", "num_pos", "mean_cov"] + ["pc_pos_cov_gte%d" % x for x in sorted(thresholds)] + ["pc_tiles_medcov_gte%d" % x for x in sorted(thresholds)] + ["tile_n", "tile_vector"], [depth_path.replace(".depth", ""), n_positions, avg_cov] + threshold_counts_prop + tile_threshold_counts_prop + [len(tile_vector), tile_vector_str]
 
 
 def swell_from_depth(depth_path, tiles, genomes, thresholds, min_pos=None, min_pos_total_zero=False):
@@ -295,57 +295,6 @@ def swell_from_bam(bam_path, tiles, genomes, thresholds, min_pos=None, min_pos_t
 #        print(bam_path, tile_num, tile[0], tile[1], scheme_name, mean_cov, median_cov)
 
 
-def scaled_bars(data):  
-    max_val = int(max(data))
-    marker = int('1' + '0'*(len(str(max_val))-1))
-    space_increment = 10
-    scale = "0" + " "*(space_increment - 1)
-    for i in range(1, max_val):
-        if i % marker == 0:
-            i_str = str(i)
-            i_len = len(i_str)
-            scale += i_str + " "*(space_increment - i_len)
-    bars_list = []
-    for i in range(len(data)):
-        bars_list.append(f"|{'='*int(space_increment*data[i]/marker)}")
-    return bars_list, scale
-
-
-def tile_depth_graph(tile_vector, tiles, show_values_on_right=False):
-    bars_list, scale = scaled_bars(tile_vector)
-    if show_values_on_right:
-        depth_graph_string = f"TILE\tSTART\tEND\tMEDIAN DEPTH\nNUM\tPOS\tPOS\t{scale}\n"
-    else:
-        depth_graph_string = f"TILE\tSTART\tEND\tMEDIAN\nNUM\tPOS\tPOS\tDEPTH\t{scale}\n"
-    # Tiles are already sorted
-    for i in range(len(tile_vector)):
-        if show_values_on_right:
-            depth_graph_string += f"{i+1}\t{tiles[i][2]['inside_start']}\t{tiles[i][2]['inside_end']}\t{bars_list[i]}{' ' if len(bars_list[i]) > 1 else ''}{int(round(tile_vector[i]))}\n"
-        else:
-            depth_graph_string += f"{i+1}\t{tiles[i][2]['inside_start']}\t{tiles[i][2]['inside_end']}\t{int(round(tile_vector[i]))}\t{bars_list[i]}\n"
-    return depth_graph_string[:-1]
-
-
-def tile_histogram(tile_vector, show_values_on_right=False):
-    depth_markers = [0, 10, 100, 1000, 10000, 100000, math.inf]
-    hist_freqs = [0 for i in range(len(depth_markers) - 1)]
-    for i in range(len(hist_freqs)):
-        for depth in tile_vector:
-            if depth_markers[i] <= depth < depth_markers[i + 1]:
-                hist_freqs[i] += 1
-    bars_list, scale = scaled_bars(hist_freqs)
-    if show_values_on_right:
-        histogram_string = f"FROM\tTO\tNUM TILES\nDEPTH\tDEPTH\t{scale}\n"
-    else:
-        histogram_string = f"FROM\tTO\tNUM\nDEPTH\tDEPTH\tTILES\t{scale}\n"
-    for i in range(len(hist_freqs)):
-        if show_values_on_right:
-            histogram_string += f"{depth_markers[i]}\t{depth_markers[i+1]-1}\t{bars_list[i]}{' ' if len(bars_list[i]) > 1 else ''}{round(hist_freqs[i], 2)}\n"
-        else:
-            histogram_string += f"{depth_markers[i]}\t{depth_markers[i+1]-1}\t{round(hist_freqs[i], 2)}\t{bars_list[i]}\n"
-    return histogram_string[:-1]
-
-
 class ArgumentParserError(Exception):
     pass
 
@@ -369,8 +318,6 @@ def main():
     parser.add_argument("--min-pos-allow-total-zero", action="store_true")
     parser.add_argument("-x", action="append", nargs=2, metavar=("key", "value",))
     parser.add_argument("--no-tile-clipping", action="store_true")
-    parser.add_argument("--tile-depth-graph", action="store_true")
-    parser.add_argument("--tile-histogram", action="store_true")
     args = parser.parse_args()
 
     called_once_args = {"--bam" : args.bam, "--depth" : args.depth, "--bed" : args.bed, "--fasta": args.fasta}
@@ -397,9 +344,9 @@ def main():
     fields.extend(fields_)
 
     if args_bam:
-        tile_vector, header_, fields_ = swell_from_bam(args_bam, tiles, args.ref, args.thresholds, min_pos=args.min_pos, min_pos_total_zero=args.min_pos_allow_total_zero)
+        header_, fields_ = swell_from_bam(args_bam, tiles, args.ref, args.thresholds, min_pos=args.min_pos, min_pos_total_zero=args.min_pos_allow_total_zero)
     elif args_depth:
-        tile_vector, header_, fields_ = swell_from_depth(args_depth, tiles, args.ref, args.thresholds, min_pos=args.min_pos, min_pos_total_zero=args.min_pos_allow_total_zero)
+        header_, fields_ = swell_from_depth(args_depth, tiles, args.ref, args.thresholds, min_pos=args.min_pos, min_pos_total_zero=args.min_pos_allow_total_zero)
     
     header.extend(header_)
     fields.extend(fields_)
@@ -417,15 +364,6 @@ def main():
     fields_s = [("%."+str(args.dp)+"f") % x if "float" in type(x).__name__ else str(x) for x in fields] # do not fucking @ me
     print("\t".join([str(x) for x in fields_s]))
 
-    graph = ""
-    if args.tile_depth_graph:
-        graph = tile_depth_graph(tile_vector, tiles)
-        print(graph)
-    
-    histogram = ""
-    if args.tile_histogram:
-        histogram = tile_histogram(tile_vector)
-        print(histogram)
 
 if __name__ == "__main__":
     main()
