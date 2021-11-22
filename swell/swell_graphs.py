@@ -1,3 +1,5 @@
+import sys
+import csv
 import math
 import random
 import numpy as np
@@ -59,33 +61,38 @@ def tile_histogram(tile_vector, show_values_on_right=False):
     return histogram_string[:-1]
 
 
-def make_pdf(swell_data, pdf_path):
-    tile_vector = swell_data['tile_vector']
+def make_pdf(header, swell_data, pdf_path):
+    if "tile_vector" in header:
+        tile_vector = swell_data['tile_vector']
+    else:
+        tile_vector = None
     with PdfPages(pdf_path) as pdf:
         fnt_size = 15
         mpl.style.use('ggplot')
         colour = "tab:orange"
-        f1 = plt.figure()
-        ax_a = f1.add_subplot(111)
-        ax_a.set(xlabel='tile', ylabel='median depth') 
-        ax_a.bar([x+1 for x in range(len(tile_vector))], tile_vector, color=colour)
-        f1.suptitle(f"bam_path = {swell_data['bam_path']}")
-        f1.tight_layout()
-        pdf.savefig() 
-        plt.close()
 
-        f2 = plt.figure()
-        ax_b = f2.add_subplot(211)
-        ax_b.set(xlabel='tile median depth', ylabel='# tiles')
-        ax_b.hist(tile_vector, bins=[x for x in range(0, int(round(max(tile_vector) + 1)), 100)], color=colour)     
-        ax_c = f2.add_subplot(212)
-        ax_c.set(xlabel='tile median depth')
-        ax_c.scatter(tile_vector, [random.random() for x in range(len(tile_vector))], s=10, color=colour)
-        ax_c.get_yaxis().set_visible(False)
-        f2.suptitle(f"bam_path = {swell_data['bam_path']}")
-        f2.tight_layout()
-        pdf.savefig() 
-        plt.close()
+        if tile_vector:
+            f1 = plt.figure()
+            ax_a = f1.add_subplot(111)
+            ax_a.set(xlabel='tile', ylabel='median depth') 
+            ax_a.bar([x+1 for x in range(len(tile_vector))], tile_vector, color=colour)
+            f1.suptitle(f"bam_path = {swell_data['bam_path']}")
+            f1.tight_layout()
+            pdf.savefig() 
+            plt.close()
+
+            f2 = plt.figure()
+            ax_b = f2.add_subplot(211)
+            ax_b.set(xlabel='tile median depth', ylabel='# tiles')
+            ax_b.hist(tile_vector, bins=[x for x in range(0, int(round(max(tile_vector) + 1)), 100)], color=colour)     
+            ax_c = f2.add_subplot(212)
+            ax_c.set(xlabel='tile median depth')
+            ax_c.scatter(tile_vector, [random.random() for x in range(len(tile_vector))], s=10, color=colour)
+            ax_c.get_yaxis().set_visible(False)
+            f2.suptitle(f"bam_path = {swell_data['bam_path']}")
+            f2.tight_layout()
+            pdf.savefig() 
+            plt.close()
 
         f3 = plt.figure()
         ax_d = f3.add_subplot(111)
@@ -106,32 +113,44 @@ def make_pdf(swell_data, pdf_path):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--swell-output", nargs='+', required=True)
+    parser.add_argument("swell_tsv")
     parser.add_argument("--show-values-on-right", action='store_true', default=False)
     parser.add_argument("--pdf-path")
     args = parser.parse_args()
-    header, fields = args.swell_output[0:int(len(args.swell_output)/2)], args.swell_output[int(len(args.swell_output)/2):]
-    swell_data = {}
-    for i in range(len(header)):
-        if header[i] == 'tile_vector':
-            swell_data[header[i]] = np.fromstring(fields[-1], sep=",")
-        else:
-            try:
-                swell_data[header[i]] = int(fields[i])
-            except ValueError:
+    if args.swell_tsv == '-':
+        f = sys.stdin.read().splitlines()
+        data = list(csv.reader(f, delimiter='\t'))
+    else:
+        with open(args.swell_tsv) as f:
+            data = list(csv.reader(f, delimiter='\t'))
+    header, rows = data[0], data[1:]
+    swell_data = []
+    for row in rows:
+        row_dict = {}
+        for i in range(len(header)):
+            if header[i] == 'tile_vector':
+                row_dict[header[i]] = np.fromstring(row[-1], sep=",")
+            else:
                 try:
-                    swell_data[header[i]] = float(fields[i])
+                    row_dict[header[i]] = int(row[i])
                 except ValueError:
-                    swell_data[header[i]] = fields[i]
-    print(f"tile_vector = {swell_data['tile_vector']}\n")
+                    try:
+                        row_dict[header[i]] = float(row[i])
+                    except ValueError:
+                        row_dict[header[i]] = row[i]
+        swell_data.append(row_dict)
+    
+    if "tile_vector" in header:
+        print(f"tile_vector = {swell_data[0]['tile_vector']}\n")
     print(f"swell_data = {swell_data}")
     # graph = tile_depth_graph(tile_vector, args.show_values_on_right)
     # histogram = tile_histogram(tile_vector, args.show_values_on_right)
     # depth_graph_title = "MEDIAN DEPTH PER TILE"
     # histogram_title = "TILE HISTOGRAM"
     # print(f"{'-' * len(depth_graph_title)}\n{depth_graph_title}\n{'-' * len(depth_graph_title)}\n{graph}\n\n{'-' * len(histogram_title)}\n{histogram_title}\n{'-' * len(histogram_title)}\n{histogram}")
+
     if args.pdf_path:
-        make_pdf(swell_data, args.pdf_path)
+        make_pdf(header, swell_data[0], args.pdf_path)
 
 
 if __name__ == '__main__':
