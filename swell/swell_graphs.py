@@ -38,7 +38,9 @@ def tile_depth_graph(tile_vector, show_values_on_right=False):
             depth_graph_string += f"{i+1}\t{bars_list[i]}{' ' if len(bars_list[i]) > 1 else ''}{int(round(tile_vector[i]))}\n"
         else:
             depth_graph_string += f"{i+1}\t{int(round(tile_vector[i]))}\t{bars_list[i]}\n"
-    return depth_graph_string[:-1]
+    depth_graph_title = "MEDIAN DEPTH PER TILE"
+    depth_graph = depth_graph_string[:-1]
+    return f"{'-' * len(depth_graph_title)}\n{depth_graph_title}\n{'-' * len(depth_graph_title)}\n{depth_graph}\n\n"
 
 
 def tile_histogram(tile_vector, show_values_on_right=False):
@@ -58,25 +60,24 @@ def tile_histogram(tile_vector, show_values_on_right=False):
             histogram_string += f"{depth_markers[i]}\t{depth_markers[i+1]-1}\t{bars_list[i]}{' ' if len(bars_list[i]) > 1 else ''}{round(hist_freqs[i], 2)}\n"
         else:
             histogram_string += f"{depth_markers[i]}\t{depth_markers[i+1]-1}\t{round(hist_freqs[i], 2)}\t{bars_list[i]}\n"
-    return histogram_string[:-1]
+    histogram_title = "TILE HISTOGRAM"
+    histogram = histogram_string[:-1]
+    return f"{'-' * len(histogram_title)}\n{histogram_title}\n{'-' * len(histogram_title)}\n{histogram}"
 
 
-def make_pdf(header, swell_data, pdf_path):
-    if "tile_vector" in header:
-        tile_vector = swell_data['tile_vector']
-    else:
-        tile_vector = None
+def make_pdf(swell_data, pdf_path):
+    fnt_size = 15
+    mpl.style.use('ggplot')
+    colour = "tab:orange"
     with PdfPages(pdf_path) as pdf:
-        fnt_size = 15
-        mpl.style.use('ggplot')
-        colour = "tab:orange"
-
-        if tile_vector:
+        if "tile_vector" in swell_data[0].keys():
+            tile_vector = swell_data[0]['tile_vector']
+            bam_path = swell_data[0]['bam_path']
             f1 = plt.figure()
             ax_a = f1.add_subplot(111)
             ax_a.set(xlabel='tile', ylabel='median depth') 
             ax_a.bar([x+1 for x in range(len(tile_vector))], tile_vector, color=colour)
-            f1.suptitle(f"bam_path = {swell_data['bam_path']}")
+            f1.suptitle(f"bam_path = {bam_path}")
             f1.tight_layout()
             pdf.savefig() 
             plt.close()
@@ -89,24 +90,45 @@ def make_pdf(header, swell_data, pdf_path):
             ax_c.set(xlabel='tile median depth')
             ax_c.scatter(tile_vector, [random.random() for x in range(len(tile_vector))], s=10, color=colour)
             ax_c.get_yaxis().set_visible(False)
-            f2.suptitle(f"bam_path = {swell_data['bam_path']}")
+            f2.suptitle(f"bam_path = {bam_path}")
             f2.tight_layout()
             pdf.savefig() 
             plt.close()
 
-        f3 = plt.figure()
-        ax_d = f3.add_subplot(111)
-        pie_data = {'pc_acgt' : None, 'pc_masked' : None, 'pc_invalid' : None, 'pc_ambiguous' : None}
-        nonzero_pie_data = {}
-        for k in pie_data.keys():
-            pie_data[k] = swell_data[k]
-            if pie_data[k] > 0:
-                nonzero_pie_data[k] = pie_data[k]
-        ax_d.pie(nonzero_pie_data.values(), colors=['tab:orange', 'lightgrey', 'black', 'tab:blue'], labels=nonzero_pie_data.keys(), startangle=90,  autopct='%1.1f%%')
-        ax_d.title.set_text(f"fasta_path = {swell_data['fasta_path']}\n num_seqs = {swell_data['num_seqs']}")
-        f3.tight_layout()
-        pdf.savefig()
-        plt.close()
+        for row in swell_data:
+            f3 = plt.figure()
+            ax_d = f3.add_subplot(111)
+            pie_data = {'pc_acgt' : None, 'pc_masked' : None, 'pc_invalid' : None, 'pc_ambiguous' : None}
+            nonzero_pie_data = {}
+            for k in pie_data.keys():
+                pie_data[k] = row[k]
+                if pie_data[k] > 0:
+                    nonzero_pie_data[k] = pie_data[k]
+            ax_d.pie(nonzero_pie_data.values(), colors=['tab:orange', 'lightgrey', 'black', 'tab:blue'], labels=nonzero_pie_data.keys(), startangle=90,  autopct='%1.1f%%')
+            ax_d.title.set_text(f"fasta_path = {row['fasta_path']}\nbiosample_source_id = {row['biosample_source_id']}\nnum_seqs = {row['num_seqs']}")
+            f3.tight_layout()
+            pdf.savefig()
+            plt.close()
+
+        if len(swell_data) > 1:
+            f4 = plt.figure()
+            ax_e = f4.add_subplot(111)
+            ax_e.set(xlabel='% acgt')
+            birm_data = [swell_data[i]['pc_acgt'] for i in range(len(swell_data)) if swell_data[i]['sequencing_org'] == 'BIRM']
+            ax_e.scatter(birm_data, [random.random() for x in range(len(birm_data))], s=10, color=colour)
+            ax_e.get_yaxis().set_visible(False)
+            f4.tight_layout()
+            pdf.savefig() 
+            plt.close()
+
+            f5 = plt.figure()
+            ax_f = f5.add_subplot(211)
+            ax_f.set(xlabel='% acgt', ylabel='# samples')
+            birm_data = [swell_data[i]['pc_acgt'] for i in range(len(swell_data)) if swell_data[i]['sequencing_org'] == 'BIRM']
+            ax_f.hist(birm_data, bins=[x for x in range(0, 101, 5)], color=colour)     
+            f5.tight_layout()
+            pdf.savefig() 
+            plt.close()
 
     print(f"PDF saved to: {pdf_path}")
 
@@ -119,38 +141,24 @@ def main():
     args = parser.parse_args()
     if args.swell_tsv == '-':
         f = sys.stdin.read().splitlines()
-        data = list(csv.reader(f, delimiter='\t'))
+        swell_data = list(csv.DictReader(f, delimiter='\t'))
     else:
         with open(args.swell_tsv) as f:
-            data = list(csv.reader(f, delimiter='\t'))
-    header, rows = data[0], data[1:]
-    swell_data = []
-    for row in rows:
-        row_dict = {}
-        for i in range(len(header)):
-            if header[i] == 'tile_vector':
-                row_dict[header[i]] = np.fromstring(row[-1], sep=",")
+            swell_data = list(csv.DictReader(f, delimiter='\t'))
+    for row in swell_data:
+        for k in row.keys():
+            if k == 'tile_vector':
+                row[k] = np.fromstring(row[k], sep=",")
             else:
                 try:
-                    row_dict[header[i]] = int(row[i])
+                    row[k] = int(row[k])
                 except ValueError:
                     try:
-                        row_dict[header[i]] = float(row[i])
+                        row[k] = float(row[k])
                     except ValueError:
-                        row_dict[header[i]] = row[i]
-        swell_data.append(row_dict)
-    
-    if "tile_vector" in header:
-        print(f"tile_vector = {swell_data[0]['tile_vector']}\n")
-    print(f"swell_data = {swell_data}")
-    # graph = tile_depth_graph(tile_vector, args.show_values_on_right)
-    # histogram = tile_histogram(tile_vector, args.show_values_on_right)
-    # depth_graph_title = "MEDIAN DEPTH PER TILE"
-    # histogram_title = "TILE HISTOGRAM"
-    # print(f"{'-' * len(depth_graph_title)}\n{depth_graph_title}\n{'-' * len(depth_graph_title)}\n{graph}\n\n{'-' * len(histogram_title)}\n{histogram_title}\n{'-' * len(histogram_title)}\n{histogram}")
-
+                        pass
     if args.pdf_path:
-        make_pdf(header, swell_data[0], args.pdf_path)
+        make_pdf(swell_data, args.pdf_path)
 
 
 if __name__ == '__main__':
