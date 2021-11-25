@@ -1,12 +1,13 @@
 library(tidyverse)
 
-swell_table <- read.table(file("stdin"), head=TRUE, sep='\t', na=c("NaN"))
-ggplot(data = swell_table, mapping = aes(x = sequencing_org, y = pc_acgt), ) +
+swell_table <- read.table(file("stdin"), head=TRUE, sep='\t', na.strings=c("NaN", "-"))
+
+ggplot(data = swell_table, mapping = aes(x = sequencing_org, y = pc_acgt)) +
     geom_point() + 
     theme_bw()
 
 ggplot(data = swell_table, mapping = aes(x = pc_acgt)) +
-    geom_histogram() +
+    geom_histogram() + 
     facet_wrap(. ~ sequencing_org) + 
     theme_bw()
 
