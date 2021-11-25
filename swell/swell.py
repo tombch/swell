@@ -111,7 +111,10 @@ def individual_swell_from_fasta(fasta_path):
     max_ungap = 0
     rows = []
     if fasta_path:
-        heng_iter = readfq.readfq(open(fasta_path))
+        if fasta_path == "-":
+            heng_iter = readfq.readfq(sys.stdin)
+        else:
+            heng_iter = readfq.readfq(open(fasta_path))
         for name, seq, qual in heng_iter:
             num_seqs = 0
             num_bases = 0
@@ -211,7 +214,10 @@ def group_swell_from_fasta(fasta_path):
     max_ungap = 0
 
     if fasta_path:
-        heng_iter = readfq.readfq(open(fasta_path))
+        if fasta_path == "-":
+            heng_iter = readfq.readfq(sys.stdin)
+        else:
+            heng_iter = readfq.readfq(open(fasta_path))
         for name, seq, qual in heng_iter:
             num_seqs += 1
             for base in seq:
