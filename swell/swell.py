@@ -185,12 +185,14 @@ def individual_swell_from_fasta(fasta_path):
             else:
                 prop_invalid = 100.0     
             # This will likely be replaced as I doubt it covers all cases
-            name_split = name.split('/')
-            biosample_source_id = name_split[1]
-            sequencing_org = name_split[2].split(':')[0]
-            rows.append([fasta_path, biosample_source_id, sequencing_org, num_seqs, num_bases, prop_acgt, prop_masked, prop_invalid, prop_ambiguous, max_gap, max_ungap])
+            # name_split = name.split('/')
+            # biosample_source_id = name_split[1]
+            # sequencing_org = name_split[2].split(':')[0]
+            header = (name.split('|'))[0]
 
-    return ["fasta_path", "biosample_source_id", "sequencing_org", "num_seqs", "num_bases", "pc_acgt", "pc_masked", "pc_invalid", "pc_ambiguous", "longest_gap", "longest_ungap"], rows
+            rows.append([fasta_path, header, num_seqs, num_bases, prop_acgt, prop_masked, prop_invalid, prop_ambiguous, max_gap, max_ungap])
+
+    return ["path", "fasta_header", "num_seqs", "num_bases", "pc_acgt", "pc_masked", "pc_invalid", "pc_ambiguous", "longest_gap", "longest_ungap"], rows
 
 
 def group_swell_from_fasta(fasta_path):
@@ -269,7 +271,7 @@ def group_swell_from_fasta(fasta_path):
         else:
             prop_invalid = 100.0
 
-    return ["fasta_path", "biosample_source_id", "sequencing_org", "num_seqs", "num_bases", "pc_acgt", "pc_masked", "pc_invalid", "pc_ambiguous", "longest_gap", "longest_ungap"], [fasta_path, "-", "-", num_seqs, num_bases, prop_acgt, prop_masked, prop_invalid, prop_ambiguous, max_gap, max_ungap]
+    return ["path", "fasta_header", "num_seqs", "num_bases", "pc_acgt", "pc_masked", "pc_invalid", "pc_ambiguous", "longest_gap", "longest_ungap"], [fasta_path, "-", num_seqs, num_bases, prop_acgt, prop_masked, prop_invalid, prop_ambiguous, max_gap, max_ungap]
 
 
 def swell_from_depth_iter(depth_iterable, depth_path, tiles, genomes, thresholds, min_pos=None, min_pos_total_zero=False):
