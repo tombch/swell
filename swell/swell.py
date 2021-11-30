@@ -192,7 +192,7 @@ def individual_swell_from_fasta(fasta_path):
 
             rows.append([fasta_path, header, num_seqs, num_bases, prop_acgt, prop_masked, prop_invalid, prop_ambiguous, max_gap, max_ungap])
 
-    return ["path", "fasta_header", "num_seqs", "num_bases", "pc_acgt", "pc_masked", "pc_invalid", "pc_ambiguous", "longest_gap", "longest_ungap"], rows
+    return ["fasta_path", "header", "num_seqs", "num_bases", "pc_acgt", "pc_masked", "pc_invalid", "pc_ambiguous", "longest_gap", "longest_ungap"], rows
 
 
 def group_swell_from_fasta(fasta_path):
@@ -271,7 +271,7 @@ def group_swell_from_fasta(fasta_path):
         else:
             prop_invalid = 100.0
 
-    return ["path", "fasta_header", "num_seqs", "num_bases", "pc_acgt", "pc_masked", "pc_invalid", "pc_ambiguous", "longest_gap", "longest_ungap"], [fasta_path, "-", num_seqs, num_bases, prop_acgt, prop_masked, prop_invalid, prop_ambiguous, max_gap, max_ungap]
+    return ["fasta_path", "header", "num_seqs", "num_bases", "pc_acgt", "pc_masked", "pc_invalid", "pc_ambiguous", "longest_gap", "longest_ungap"], [fasta_path, "-", num_seqs, num_bases, prop_acgt, prop_masked, prop_invalid, prop_ambiguous, max_gap, max_ungap]
 
 
 def swell_from_depth_iter(depth_iterable, depth_path, tiles, genomes, thresholds, min_pos=None, min_pos_total_zero=False):
@@ -436,6 +436,8 @@ def main():
     individual_parser.add_argument("-x", action="append", nargs=2, metavar=("key", "value",))
 
     arguments = sys.argv[1:]
+    if not arguments:
+        raise ArgumentParserError("expected at least 1 argument")
     sub_command = arguments[0]
     if sub_command != "group" and sub_command != "individual":
         # Default subcommand is to average samples in fasta
