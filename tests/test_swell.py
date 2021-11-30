@@ -15,12 +15,13 @@ def test_load_scheme():
     assert swell.load_scheme(bed_path) == old_swell.load_scheme(bed_path)
 
 
-def test_swell_from_fasta():
+def test_group_swell_from_fasta():
     old_header, old_fields = old_swell.swell_from_fasta(fasta_path)
-    new_header, new_fields = swell.swell_from_fasta(fasta_path)
-    ambiguous_data_index = 6 # position of new data (pc_ambiguous) returned by swell
-    new_header = new_header[:ambiguous_data_index] + new_header[ambiguous_data_index+1:] # remove pc_ambiguous header
-    new_fields = new_fields[:ambiguous_data_index] + new_fields[ambiguous_data_index+1:] # remove pc_ambiguous field
+    new_header, new_fields = swell.group_swell_from_fasta(fasta_path)
+    new_indexes = [1, 6] # positions of new data returned by swell
+    for new_i in new_indexes:
+        new_header = new_header[:new_i] + new_header[new_i+1:]
+        new_fields = new_fields[:new_i] + new_fields[new_i+1:]
     assert new_header == old_header and new_fields == old_fields
 
 
