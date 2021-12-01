@@ -90,7 +90,7 @@ def load_scheme(scheme_bed, no_clip=False):
     return new_tiles
 
 
-def individual_swell_from_fasta(fasta_path):
+def separate_swell_from_fasta(fasta_path):
     num_seqs = 0
     num_bases = 0
     num_acgt = 0
@@ -416,76 +416,57 @@ def main():
     parser = ErrorThrowingArgParser()
     subparsers = parser.add_subparsers(dest='command')
 
-    group_parser = subparsers.add_parser("group")
-    group_parser.add_argument("--fasta", nargs=1, action='append', required=False)
-    group_exclusive = group_parser.add_mutually_exclusive_group(required=False)
-    group_exclusive.add_argument("--bam", nargs=1, action='append') # bam file
-    group_exclusive.add_argument("--depth", nargs=1, action='append') # depth file produced from bam via samtools
-    group_parser.add_argument("--bed", nargs=1, action='append', required=False)
-    group_parser.add_argument("--ref", required=False, nargs='+') # sequence name, also changed from required=True
-    group_parser.add_argument("--thresholds", action='append', type=int, nargs='+', default=[1, 5, 10, 20, 50, 100, 200])
-    group_parser.add_argument("--dp", default=2, type=int, required=False)
-    group_parser.add_argument("--min-pos", type=int, required=False)
-    group_parser.add_argument("--min-pos-allow-total-zero", action="store_true")
-    group_parser.add_argument("--no-tile-clipping", action="store_true")
-    group_parser.add_argument("-x", action="append", nargs=2, metavar=("key", "value",))
+    separate_fasta_parser = subparsers.add_parser("separate-fasta")
+    separate_fasta_parser.add_argument("fasta_path")
+    separate_fasta_parser.add_argument("--dp", default=2, type=int, required=False)
+    separate_fasta_parser.add_argument("-x", action="append", nargs=2, metavar=("key", "value",))
 
-    individual_parser = subparsers.add_parser("individual")
-    individual_parser.add_argument("--fasta", nargs=1, action='append', required=False)
-    individual_parser.add_argument("--dp", default=2, type=int, required=False)
-    individual_parser.add_argument("-x", action="append", nargs=2, metavar=("key", "value",))
+    group_fasta_parser = subparsers.add_parser("group-fasta")
+    group_fasta_parser.add_argument("fasta_path")
+    group_fasta_parser.add_argument("--dp", default=2, type=int, required=False)
+    group_fasta_parser.add_argument("-x", action="append", nargs=2, metavar=("key", "value",))
 
-    arguments = sys.argv[1:]
-    if not arguments:
-        raise ArgumentParserError("expected at least 1 argument")
-    sub_command = arguments[0]
-    if sub_command != "group" and sub_command != "individual":
-        # Default subcommand is to average samples in fasta
-        arguments = ["group"] + arguments
+    bam_parser = subparsers.add_parser("bam")
+    bam_parser.add_argument("bam_path")
+    bam_parser.add_argument("--bed", required=True)
+    bam_parser.add_argument("--ref", required=True, nargs='+')
+    bam_parser.add_argument("--thresholds", action='append', type=int, nargs='+', default=[1, 5, 10, 20, 50, 100, 200])
+    bam_parser.add_argument("--min-pos", type=int, required=False)
+    bam_parser.add_argument("--min-pos-allow-total-zero", action="store_true")
+    bam_parser.add_argument("--no-tile-clipping", action="store_true")
+    bam_parser.add_argument("--dp", default=2, type=int, required=False)
+    bam_parser.add_argument("-x", action="append", nargs=2, metavar=("key", "value",))
 
-    args = parser.parse_args(arguments)
+    depth_parser = subparsers.add_parser("depth")
+    depth_parser.add_argument("depth_path")
+    depth_parser.add_argument("--bed", required=True)
+    depth_parser.add_argument("--ref", required=True, nargs='+')
+    depth_parser.add_argument("--thresholds", action='append', type=int, nargs='+', default=[1, 5, 10, 20, 50, 100, 200])
+    depth_parser.add_argument("--min-pos", type=int, required=False)
+    depth_parser.add_argument("--min-pos-allow-total-zero", action="store_true")
+    depth_parser.add_argument("--no-tile-clipping", action="store_true")
+    depth_parser.add_argument("--dp", default=2, type=int, required=False)
+    depth_parser.add_argument("-x", action="append", nargs=2, metavar=("key", "value",))
+
+    args = parser.parse_args()
 
     header = []
     fields = []
 
-    if args.command == "group":
-        called_once_args = {"--bam" : args.bam, "--depth" : args.depth, "--bed" : args.bed, "--fasta": args.fasta}
-        for k in called_once_args.keys():
-            if called_once_args[k] and len(called_once_args[k]) > 1:
-                raise ArgumentParserError(f"{k} can only be specified once")
-            elif called_once_args[k] and len(called_once_args[k]) == 1:
-                called_once_args[k] = called_once_args[k][0][0]
-        args_bam = called_once_args["--bam"]
-        args_depth = called_once_args["--depth"]
-        args_bed = called_once_args["--bed"]
-        args_fasta = called_once_args["--fasta"]
-        if args_bed:
-            tiles = load_scheme(args_bed, args.no_tile_clipping)
-        else:
-            tiles = {}
-        header_, fields_ = group_swell_from_fasta(args_fasta)
-        header.extend(header_)
-        fields.extend(fields_)
-        if args_bam:
-            header_, fields_ = swell_from_bam(args_bam, tiles, args.ref, args.thresholds, min_pos=args.min_pos, min_pos_total_zero=args.min_pos_allow_total_zero)
-            header.extend(header_)
-            fields.extend(fields_)
-        elif args_depth:
-            header_, fields_ = swell_from_depth(args_depth, tiles, args.ref, args.thresholds, min_pos=args.min_pos, min_pos_total_zero=args.min_pos_allow_total_zero)
-            header.extend(header_)
-            fields.extend(fields_)
-    elif args.command == "individual":
-        called_once_args = {"--fasta": args.fasta}
-        for k in called_once_args.keys():
-            if called_once_args[k] and len(called_once_args[k]) > 1:
-                raise ArgumentParserError(f"{k} can only be specified once")
-            elif called_once_args[k] and len(called_once_args[k]) == 1:
-                called_once_args[k] = called_once_args[k][0][0]
-        args_fasta = called_once_args["--fasta"]
-        header_, fields_ = individual_swell_from_fasta(args_fasta)
-        header.extend(header_)
-        fields.extend(fields_)
-
+    if args.command == "separate-fasta":
+        header_, fields_ = separate_swell_from_fasta(args.fasta_path)
+    elif args.command == "group-fasta":
+        header_, fields_ = group_swell_from_fasta(args.fasta_path)
+    elif args.command == "bam":
+        tiles = load_scheme(args.bed, args.no_tile_clipping)
+        header_, fields_ = swell_from_bam(args.bam_path, tiles, args.ref, args.thresholds, min_pos=args.min_pos, min_pos_total_zero=args.min_pos_allow_total_zero)
+    elif args.command == "depth":
+        tiles = load_scheme(args.bed, args.no_tile_clipping)
+        header_, fields_ = swell_from_depth(args.depth_path, tiles, args.ref, args.thresholds, min_pos=args.min_pos, min_pos_total_zero=args.min_pos_allow_total_zero)
+    
+    header.extend(header_)
+    fields.extend(fields_)
+    
     keys = []
     values = []
     if args.x:
@@ -496,13 +477,13 @@ def main():
     fields.extend(values)
 
     print("\t".join(header))
-    if args.command == "group":
-        fields_s = [("%."+str(args.dp)+"f") % x if "float" in type(x).__name__ else str(x) for x in fields] # do not fucking @ me
-        print("\t".join([str(x) for x in fields_s]))
-    elif args.command == "individual":
+    if args.command == "separate-fasta":
         for row in fields:
             row_s = [("%."+str(args.dp)+"f") % x if "float" in type(x).__name__ else str(x) for x in row] # do not fucking @ me
             print("\t".join([str(x) for x in row_s]))
+    else:
+        fields_s = [("%."+str(args.dp)+"f") % x if "float" in type(x).__name__ else str(x) for x in fields] # do not fucking @ me
+        print("\t".join([str(x) for x in fields_s]))
 
 
 if __name__ == "__main__":

@@ -10,59 +10,107 @@ import matplotlib.style
 from matplotlib.backends.backend_pdf import PdfPages
 
 
-def scaled_bars(data):  
-    max_val = int(max(data))
-    marker = int('1' + '0'*(len(str(max_val))-1))
-    space_increment = 10
-    scale = "0" + " "*(space_increment - 1)
-    for i in range(1, max_val):
-        if i % marker == 0:
-            i_str = str(i)
-            i_len = len(i_str)
-            scale += i_str + " "*(space_increment - i_len)
-    bars_list = []
-    for i in range(len(data)):
-        bars_list.append(f"|{'='*int(space_increment*data[i]/marker)}")
-    return bars_list, scale
-
-
-def tile_depth_graph(tile_vector, show_values_on_right=False):
-    bars_list, scale = scaled_bars(tile_vector)
-    if show_values_on_right:
-        depth_graph_string = f"TILE\tMEDIAN DEPTH\nNUM\t{scale}\n"
-    else:
-        depth_graph_string = f"TILE\tMEDIAN\nNUM\tDEPTH\t{scale}\n"
-    # Tiles are already sorted
-    for i in range(len(tile_vector)):
-        if show_values_on_right:
-            depth_graph_string += f"{i+1}\t{bars_list[i]}{' ' if len(bars_list[i]) > 1 else ''}{int(round(tile_vector[i]))}\n"
+def get_scale_bound_and_marker(values):
+    scale_bound = int('1' + '0'*(len(str(round(max(values))))))
+    if max(values) < scale_bound / 2:
+        scale_bound = int(scale_bound / 2)
+    marker = int(scale_bound / 10)
+    for i in range(scale_bound, 0, -marker):
+        if max(values) + marker > i:
+            break
         else:
-            depth_graph_string += f"{i+1}\t{int(round(tile_vector[i]))}\t{bars_list[i]}\n"
-    depth_graph_title = "MEDIAN DEPTH PER TILE"
-    depth_graph = depth_graph_string[:-1]
-    return f"{'-' * len(depth_graph_title)}\n{depth_graph_title}\n{'-' * len(depth_graph_title)}\n{depth_graph}\n\n"
+            scale_bound -= marker            
+    return scale_bound, marker
 
 
-def tile_histogram(tile_vector, show_values_on_right=False):
-    depth_markers = [0, 10, 100, 1000, 10000, 100000, math.inf]
-    hist_freqs = [0 for i in range(len(depth_markers) - 1)]
-    for i in range(len(hist_freqs)):
-        for depth in tile_vector:
-            if depth_markers[i] <= depth < depth_markers[i + 1]:
-                hist_freqs[i] += 1
-    bars_list, scale = scaled_bars(hist_freqs)
-    if show_values_on_right:
-        histogram_string = f"FROM\tTO\tNUM TILES\nDEPTH\tDEPTH\t{scale}\n"
-    else:
-        histogram_string = f"FROM\tTO\tNUM\nDEPTH\tDEPTH\tTILES\t{scale}\n"
-    for i in range(len(hist_freqs)):
-        if show_values_on_right:
-            histogram_string += f"{depth_markers[i]}\t{depth_markers[i+1]-1}\t{bars_list[i]}{' ' if len(bars_list[i]) > 1 else ''}{round(hist_freqs[i], 2)}\n"
+def plot_graph(y_values):
+    graph_height, marker = get_scale_bound_and_marker(y_values)
+    y_scale_val = (i for i in range(graph_height, -1, -marker))
+    step_val = int(marker / 5)
+    graph = []
+    visited = [False for x in y_values]
+    current_height_char = ":"
+    for current_height in range(graph_height, 0, -step_val):
+        current_line = []
+        for i, x in enumerate(y_values):
+            if not visited[i] and x >= current_height:
+                current_line.append(current_height_char)
+                visited[i] = True
+            elif x >= current_height:
+                current_line.append(':')
+            # elif current_height % marker == 0:
+            #     current_line.append('_')
+            else:
+                current_line.append(' ')
+        if current_height % marker == 0:
+            graph.append(current_line + ['|', '- ', str(next(y_scale_val))])
+        else: 
+            graph.append(current_line + ['|'])
+        if current_height_char == ":":
+            current_height_char = "."
         else:
-            histogram_string += f"{depth_markers[i]}\t{depth_markers[i+1]-1}\t{round(hist_freqs[i], 2)}\t{bars_list[i]}\n"
-    histogram_title = "TILE HISTOGRAM"
-    histogram = histogram_string[:-1]
-    return f"{'-' * len(histogram_title)}\n{histogram_title}\n{'-' * len(histogram_title)}\n{histogram}"
+            current_height_char = ":"
+    graph.append(['=' for x in y_values] + ['|', '- ', str(next(y_scale_val))])
+    return graph
+
+
+def depth_x_axis(values):
+    ticks = ""
+    scale_string = f"{' ' * 4}"
+    for x in values:
+        if x % 5 == 0:
+            scale_string += str(x)
+            scale_string += f"{' ' * (5 - len(str(x)))}"
+            ticks += "*"
+        else:
+            ticks += " "
+    return f"{ticks}\n{scale_string}"
+
+
+def depth_graph(x_values, y_values):
+    graph = plot_graph(y_values)
+    graph.append(depth_x_axis(x_values))
+    graph_name = "MEDIAN DEPTH PER TILE".center(int(len(graph[-1])/2))
+    bars = f"{len(graph_name.strip())*'-'}".center(int(len(graph[-1])/2))
+    title = f"{bars}\n{graph_name}\n{bars}"
+    graph.append(title)
+    graph_string = '\n'.join([''.join(line) for line in graph])
+    return graph_string
+
+
+def get_counts(values, graph_length, step_val):
+    bin_vals = [x for x in range(0, graph_length, step_val)]
+    counts = [0 for i in range(len(bin_vals) - 1)]
+    for i in range(len(counts)):
+        for val in values:
+            if bin_vals[i] <= val < bin_vals[i + 1]:
+                counts[i] += 1
+    return counts
+
+
+def hist_x_axis(marker, graph_height, step_val):
+    ticks = "<"
+    scale_string = f""
+    for x in range(0, graph_height, step_val):
+        if x % marker == 0:
+            scale_string += str(x)
+            scale_string += f"{' ' * (10 - len(str(x)))}"
+            ticks += f"{'-' * (10 - len('><'))}" + "><"
+    return f"{ticks[:-1]}\n{scale_string}"
+
+
+def histogram(x_values):
+    graph_length, x_marker = get_scale_bound_and_marker(x_values)
+    x_step_val = int(x_marker / 10)
+    y_values = get_counts(x_values, graph_length, x_step_val)
+    graph = plot_graph(y_values)
+    graph.append(hist_x_axis(x_marker, graph_length, x_step_val))
+    graph_name = "TILE HISTOGRAM".center(int(len(graph[-1])/2))
+    bars = f"{len(graph_name.strip())*'-'}".center(int(len(graph[-1])/2))
+    title = f"{bars}\n{graph_name}\n{bars}"
+    graph.append(title)
+    graph_string = '\n'.join([''.join(line) for line in graph])
+    return graph_string
 
 
 def make_pdf(swell_data, pdf_path):
@@ -136,15 +184,19 @@ def make_pdf(swell_data, pdf_path):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("swell_tsv")
-    parser.add_argument("--show-values-on-right", action='store_true', default=False)
+    parser.add_argument("--ascii-depth-graph", action="store_true")
+    parser.add_argument("--ascii-histogram", action="store_true")
+    parser.add_argument("--show-values-on-right", action="store_true", default=False)
     parser.add_argument("--pdf-path")
     args = parser.parse_args()
+    
     if args.swell_tsv == '-':
         f = sys.stdin.read().splitlines()
         swell_data = list(csv.DictReader(f, delimiter='\t'))
     else:
         with open(args.swell_tsv) as f:
             swell_data = list(csv.DictReader(f, delimiter='\t'))
+
     for row in swell_data:
         for k in row.keys():
             if k == 'tile_vector':
@@ -157,6 +209,14 @@ def main():
                         row[k] = float(row[k])
                     except ValueError:
                         pass
+
+    if args.ascii_depth_graph:
+        tile_numbers = range(1, len(swell_data[0]['tile_vector'])+1)
+        print(depth_graph(tile_numbers, swell_data[0]['tile_vector']))
+
+    if args.ascii_histogram:
+        print(histogram(swell_data[0]['tile_vector']))
+
     if args.pdf_path:
         make_pdf(swell_data, args.pdf_path)
 
