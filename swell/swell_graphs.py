@@ -23,13 +23,19 @@ def get_scale_bound_and_marker(values):
     return scale_bound, marker
 
 
-def plot_graph(y_values):
+def plot_graph(y_values, ascii_chars=False):
     graph_height, marker = get_scale_bound_and_marker(y_values)
     y_scale_val = (i for i in range(graph_height, -1, -marker))
     step_val = int(marker / 5)
     graph = []
     visited = [False for x in y_values]
-    current_height_char = ":"
+    if ascii_chars:
+        half_block = "."
+        full_block = "!"
+    else:
+        half_block = "▄"
+        full_block = "█"
+    current_height_char = full_block
     for current_height in range(graph_height, 0, -step_val):
         current_line = []
         for i, x in enumerate(y_values):
@@ -37,26 +43,26 @@ def plot_graph(y_values):
                 current_line.append(current_height_char)
                 visited[i] = True
             elif x >= current_height:
-                current_line.append(':')
-            # elif current_height % marker == 0:
-            #     current_line.append('_')
+                current_line.append(full_block)
+            elif current_height % marker == 0:
+                current_line.append('-')
             else:
                 current_line.append(' ')
         if current_height % marker == 0:
-            graph.append(current_line + ['|', '- ', str(next(y_scale_val))])
+            graph.append(['|'] + current_line + ['|', '- ', str(next(y_scale_val))])
         else: 
-            graph.append(current_line + ['|'])
-        if current_height_char == ":":
-            current_height_char = "."
+            graph.append(['|'] + current_line + ['|'])
+        if current_height_char == full_block:
+            current_height_char = half_block
         else:
-            current_height_char = ":"
-    graph.append(['=' for x in y_values] + ['|', '- ', str(next(y_scale_val))])
+            current_height_char = full_block
+    graph.append(['|'] + ['=' for x in y_values] + ['|', '- ', str(next(y_scale_val))])
     return graph
 
 
 def depth_x_axis(values):
-    ticks = ""
-    scale_string = f"{' ' * 4}"
+    ticks = " "
+    scale_string = f"{' ' * 5}"
     for x in values:
         if x % 5 == 0:
             scale_string += str(x)
@@ -64,16 +70,18 @@ def depth_x_axis(values):
             ticks += "*"
         else:
             ticks += " "
-    return f"{ticks}\n{scale_string}"
+    return ticks, scale_string
 
 
-def depth_graph(x_values, y_values):
-    graph = plot_graph(y_values)
-    graph.append(depth_x_axis(x_values))
-    graph_name = "MEDIAN DEPTH PER TILE".center(int(len(graph[-1])/2))
-    bars = f"{len(graph_name.strip())*'-'}".center(int(len(graph[-1])/2))
+def depth_graph(x_values, y_values, ascii_chars=False):
+    graph = plot_graph(y_values, ascii_chars=ascii_chars)
+    ticks, scale_string = depth_x_axis(x_values)
+    graph.append(ticks)
+    graph.append(scale_string)
+    graph_name = "MEDIAN DEPTH PER TILE".center(len(graph[0]))
+    bars = f"{len(graph_name.strip())*'-'}".center(len(graph[0]))
     title = f"{bars}\n{graph_name}\n{bars}"
-    graph.append(title)
+    graph = [title] + graph
     graph_string = '\n'.join([''.join(line) for line in graph])
     return graph_string
 
@@ -89,26 +97,28 @@ def get_counts(values, graph_length, step_val):
 
 
 def hist_x_axis(marker, graph_height, step_val):
-    ticks = "<"
-    scale_string = f""
+    ticks = " <"
+    scale_string = f" "
     for x in range(0, graph_height, step_val):
         if x % marker == 0:
             scale_string += str(x)
             scale_string += f"{' ' * (10 - len(str(x)))}"
             ticks += f"{'-' * (10 - len('><'))}" + "><"
-    return f"{ticks[:-1]}\n{scale_string}"
+    return ticks[:-1], scale_string
 
 
-def histogram(x_values):
+def histogram(x_values, ascii_chars=False):
     graph_length, x_marker = get_scale_bound_and_marker(x_values)
     x_step_val = int(x_marker / 10)
     y_values = get_counts(x_values, graph_length, x_step_val)
-    graph = plot_graph(y_values)
-    graph.append(hist_x_axis(x_marker, graph_length, x_step_val))
-    graph_name = "TILE HISTOGRAM".center(int(len(graph[-1])/2))
-    bars = f"{len(graph_name.strip())*'-'}".center(int(len(graph[-1])/2))
+    graph = plot_graph(y_values, ascii_chars=ascii_chars)
+    ticks, scale_string = hist_x_axis(x_marker, graph_length, x_step_val)
+    graph.append(ticks)
+    graph.append(scale_string)
+    graph_name = "TILE HISTOGRAM".center(len(graph[0]))
+    bars = f"{len(graph_name.strip())*'-'}".center(len(graph[0]))
     title = f"{bars}\n{graph_name}\n{bars}"
-    graph.append(title)
+    graph = [title] + graph
     graph_string = '\n'.join([''.join(line) for line in graph])
     return graph_string
 
@@ -184,8 +194,9 @@ def make_pdf(swell_data, pdf_path):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("swell_tsv")
-    parser.add_argument("--ascii-depth-graph", action="store_true")
-    parser.add_argument("--ascii-histogram", action="store_true")
+    parser.add_argument("--depth-graph", action="store_true")
+    parser.add_argument("--histogram", action="store_true")
+    parser.add_argument("--ascii", action="store_true")
     parser.add_argument("--show-values-on-right", action="store_true", default=False)
     parser.add_argument("--pdf-path")
     args = parser.parse_args()
@@ -210,12 +221,12 @@ def main():
                     except ValueError:
                         pass
 
-    if args.ascii_depth_graph:
+    if args.depth_graph:
         tile_numbers = range(1, len(swell_data[0]['tile_vector'])+1)
-        print(depth_graph(tile_numbers, swell_data[0]['tile_vector']))
+        print(depth_graph(tile_numbers, swell_data[0]['tile_vector'], ascii_chars=args.ascii))
 
-    if args.ascii_histogram:
-        print(histogram(swell_data[0]['tile_vector']))
+    if args.histogram:
+        print(histogram(swell_data[0]['tile_vector'], ascii_chars=args.ascii))
 
     if args.pdf_path:
         make_pdf(swell_data, args.pdf_path)
