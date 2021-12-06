@@ -6,20 +6,21 @@ num_weeks = 5
 args <- commandArgs(trailingOnly = TRUE)
 swell <- read.table(file("stdin"), head=TRUE, sep='\t', na.strings=c("NaN", "-"))
 metadata <- read.table(args[1], head=TRUE, sep='\t', fill=TRUE)
-# Filter metadata by the past x days
-filter_date = Sys.Date() - num_days
-metadata <- filter(metadata, sequencing_submission_date >= filter_date) 
+df <- merge(x=swell, y=metadata, by.x="header", by.y="fasta_header")
+print(df)
+
+# Filter df by the past x days
+# filter_date = Sys.Date() - num_days
+# df <- filter(df, sequencing_submission_date >= filter_date) 
 # Calculate ISO week for each resulting entry
-metadata$sequencing_submission_week = as.integer(strftime(metadata$sequencing_submission_date, format="%V"))
+df$sequencing_submission_week = as.integer(strftime(df$sequencing_submission_date, format="%V"))
 # Use last week as the final week in the filtering
 this_week = as.integer(strftime(Sys.Date(), format="%V"))
-last_week = this_week - 1
-# Filter metadata to be only the past x weeks up to and including last week
-metadata <- filter(metadata, sequencing_submission_week > last_week - num_weeks) 
-metadata <- filter(metadata, sequencing_submission_week < this_week) 
+# last_week = this_week - 1
+# Filter df to be only the past x weeks up to and including last week
+# df <- filter(df, sequencing_submission_week > last_week - num_weeks) 
+df <- filter(df, sequencing_submission_week < this_week) 
 
-# Merge ignores rows that don't have a matching fasta_header
-df <- merge(x=swell, y=metadata, by.x="header", by.y="fasta_header")
 
 # Percentage acgt scatterplot, sequencing org on x axis
 ggplot(data = df, mapping = aes(x = sequencing_org_code, y = pc_acgt)) +
