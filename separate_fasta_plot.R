@@ -3,8 +3,9 @@ library(tidyverse)
 num_days = 100
 num_weeks = 5
 
+args <- commandArgs(trailingOnly = TRUE)
 swell <- read.table(file("stdin"), head=TRUE, sep='\t', na.strings=c("NaN", "-"))
-metadata <- read.table("majora.metadata.matched.tsv", head=TRUE, sep='\t', fill=TRUE)
+metadata <- read.table(args[1], head=TRUE, sep='\t', fill=TRUE)
 # Filter metadata by the past x days
 filter_date = Sys.Date() - num_days
 metadata <- filter(metadata, sequencing_submission_date >= filter_date) 
