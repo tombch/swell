@@ -109,6 +109,7 @@ def separate_swell_from_fasta(fasta_path):
     prop_ambiguous = 0
     max_gap = 0
     max_ungap = 0
+
     rows = []
     if fasta_path:
         if fasta_path == "-":
@@ -184,12 +185,8 @@ def separate_swell_from_fasta(fasta_path):
                     max_ungap = 0
             else:
                 prop_invalid = 100.0     
-            # This will likely be replaced as I doubt it covers all cases
-            # name_split = name.split('/')
-            # biosample_source_id = name_split[1]
-            # sequencing_org = name_split[2].split(':')[0]
+               
             header = (name.split('|'))[0]
-
             rows.append([fasta_path, header, num_seqs, num_bases, prop_acgt, prop_masked, prop_invalid, prop_ambiguous, max_gap, max_ungap])
 
     return ["fasta_path", "header", "num_seqs", "num_bases", "pc_acgt", "pc_masked", "pc_invalid", "pc_ambiguous", "longest_gap", "longest_ungap"], rows
@@ -215,6 +212,7 @@ def group_swell_from_fasta(fasta_path):
     max_gap = 0
     max_ungap = 0
 
+    rows = []
     if fasta_path:
         if fasta_path == "-":
             heng_iter = readfq.readfq(sys.stdin)
@@ -271,7 +269,9 @@ def group_swell_from_fasta(fasta_path):
         else:
             prop_invalid = 100.0
 
-    return ["fasta_path", "header", "num_seqs", "num_bases", "pc_acgt", "pc_masked", "pc_invalid", "pc_ambiguous", "longest_gap", "longest_ungap"], [fasta_path, "-", num_seqs, num_bases, prop_acgt, prop_masked, prop_invalid, prop_ambiguous, max_gap, max_ungap]
+        rows.append([fasta_path, "-", num_seqs, num_bases, prop_acgt, prop_masked, prop_invalid, prop_ambiguous, max_gap, max_ungap])
+    
+    return ["fasta_path", "header", "num_seqs", "num_bases", "pc_acgt", "pc_masked", "pc_invalid", "pc_ambiguous", "longest_gap", "longest_ungap"], rows
 
 
 def swell_from_depth_iter(depth_iterable, depth_path, tiles, genomes, thresholds, min_pos=None, min_pos_total_zero=False):
@@ -377,7 +377,9 @@ def swell_from_depth_iter(depth_iterable, depth_path, tiles, genomes, thresholds
     else:
         tile_vector_str = ",".join(["%.2f" % x for x in tile_vector])
 
-    return ["bam_path", "num_pos", "mean_cov"] + ["pc_pos_cov_gte%d" % x for x in sorted(thresholds)] + ["pc_tiles_medcov_gte%d" % x for x in sorted(thresholds)] + ["tile_n", "tile_vector"], [depth_path.replace(".depth", ""), n_positions, avg_cov] + threshold_counts_prop + tile_threshold_counts_prop + [len(tile_vector), tile_vector_str]
+    rows = []
+    rows.append([depth_path.replace(".depth", ""), n_positions, avg_cov] + threshold_counts_prop + tile_threshold_counts_prop + [len(tile_vector), tile_vector_str])
+    return ["bam_path", "num_pos", "mean_cov"] + ["pc_pos_cov_gte%d" % x for x in sorted(thresholds)] + ["pc_tiles_medcov_gte%d" % x for x in sorted(thresholds)] + ["tile_n", "tile_vector"], rows 
 
 
 def swell_from_depth(depth_path, tiles, genomes, thresholds, min_pos=None, min_pos_total_zero=False):
@@ -453,37 +455,33 @@ def main():
     header = []
     fields = []
 
-    if args.command == "separate-fasta":
-        header_, fields_ = separate_swell_from_fasta(args.fasta_path)
-    elif args.command == "group-fasta":
-        header_, fields_ = group_swell_from_fasta(args.fasta_path)
-    elif args.command == "bam":
-        tiles = load_scheme(args.bed, args.no_tile_clipping)
-        header_, fields_ = swell_from_bam(args.bam_path, tiles, args.ref, args.thresholds, min_pos=args.min_pos, min_pos_total_zero=args.min_pos_allow_total_zero)
-    elif args.command == "depth":
-        tiles = load_scheme(args.bed, args.no_tile_clipping)
-        header_, fields_ = swell_from_depth(args.depth_path, tiles, args.ref, args.thresholds, min_pos=args.min_pos, min_pos_total_zero=args.min_pos_allow_total_zero)
-    
-    header.extend(header_)
-    fields.extend(fields_)
-    
-    keys = []
-    values = []
-    if args.x:
-        for meta in args.x:
-            keys.append(meta[0])
-            values.append(meta[1])
-    header.extend(keys)
-    fields.extend(values)
+    if args.command:
+        if args.command == "separate-fasta":
+            header_, fields_ = separate_swell_from_fasta(args.fasta_path)
+        elif args.command == "group-fasta":
+            header_, fields_ = group_swell_from_fasta(args.fasta_path)
+        elif args.command == "bam":
+            tiles = load_scheme(args.bed, args.no_tile_clipping)
+            header_, fields_ = swell_from_bam(args.bam_path, tiles, args.ref, args.thresholds, min_pos=args.min_pos, min_pos_total_zero=args.min_pos_allow_total_zero)
+        elif args.command == "depth":
+            tiles = load_scheme(args.bed, args.no_tile_clipping)
+            header_, fields_ = swell_from_depth(args.depth_path, tiles, args.ref, args.thresholds, min_pos=args.min_pos, min_pos_total_zero=args.min_pos_allow_total_zero)    
+        header.extend(header_)
+        fields.extend(fields_)
 
-    print("\t".join(header))
-    if args.command == "separate-fasta":
+        keys = []
+        values = []
+        if args.x:
+            for key, value in args.x:
+                keys.append(key)
+                values.append(value)
+        header.extend(keys)
+        fields[0].extend(values)
+
+        print("\t".join(header))
         for row in fields:
             row_s = [("%."+str(args.dp)+"f") % x if "float" in type(x).__name__ else str(x) for x in row] # do not fucking @ me
             print("\t".join([str(x) for x in row_s]))
-    else:
-        fields_s = [("%."+str(args.dp)+"f") % x if "float" in type(x).__name__ else str(x) for x in fields] # do not fucking @ me
-        print("\t".join([str(x) for x in fields_s]))
 
 
 if __name__ == "__main__":

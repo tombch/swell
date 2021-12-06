@@ -18,16 +18,35 @@ def test_load_scheme():
 def test_group_swell_from_fasta():
     old_header, old_fields = old_swell.swell_from_fasta(fasta_path)
     new_header, new_fields = swell.group_swell_from_fasta(fasta_path)
-    new_indexes = [1, 6] # positions of new data returned by swell
-    for new_i in new_indexes:
-        new_header = new_header[:new_i] + new_header[new_i+1:]
-        new_fields = new_fields[:new_i] + new_fields[new_i+1:]
-    assert new_header == old_header and new_fields == old_fields
+    new_fields = new_fields[0]
+    new_indexes = [1, 7] # Positions of new data returned by swell (header and pc_ambiguous columns)
+    matching_new_header = []
+    matching_new_fields = []
+    for i, (header, field) in enumerate(zip(new_header, new_fields)):
+        if not (i in new_indexes):
+            matching_new_header.append(header)
+            matching_new_fields.append(field)
+    assert matching_new_header == old_header and matching_new_fields == old_fields
+
+
+def test_separate_swell_from_fasta():
+    old_header, old_fields = old_swell.swell_from_fasta(fasta_path)
+    new_header, new_fields = swell.separate_swell_from_fasta(fasta_path)
+    new_fields = new_fields[0]
+    new_indexes = [1, 7] # Positions of new data returned by swell (header and pc_ambiguous columns)
+    matching_new_header = []
+    matching_new_fields = []
+    for i, (header, field) in enumerate(zip(new_header, new_fields)):
+        if not (i in new_indexes):
+            matching_new_header.append(header)
+            matching_new_fields.append(field)
+    assert matching_new_header == old_header and matching_new_fields == old_fields
 
 
 def test_swell_from_depth():
     new_tiles = swell.load_scheme(bed_path)
-    new_header, new_fields = swell.swell_from_depth(depth_path, new_tiles, ref, thresholds) 
+    new_header, new_fields = swell.swell_from_depth(depth_path, new_tiles, ref, thresholds)
+    new_fields = new_fields[0]
     old_tiles = old_swell.load_scheme(bed_path)
     old_header, old_fields = old_swell.swell_from_depth(depth_path, old_tiles, ref, thresholds)
     assert new_header == old_header and new_fields == old_fields
@@ -35,7 +54,8 @@ def test_swell_from_depth():
 
 def test_swell_from_bam():
     new_tiles = swell.load_scheme(bed_path)
-    new_header, new_fields = swell.swell_from_bam(bam_path, new_tiles, ref, thresholds) 
+    new_header, new_fields = swell.swell_from_bam(bam_path, new_tiles, ref, thresholds)
+    new_fields = new_fields[0]
     old_tiles = old_swell.load_scheme(bed_path)
     old_header, old_fields = old_swell.swell_from_depth(depth_path, old_tiles, ref, thresholds)
     assert new_header == old_header and new_fields == old_fields
