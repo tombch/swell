@@ -1,7 +1,6 @@
 library(tidyverse)
 swell <- read.table(file("stdin"), head=TRUE, sep='\t', na.strings=c("NaN", "-"))
 
-
 positive_coverage <- c(">=1", ">=5", ">=10", ">=20", ">=50", ">=100", ">=200")
 percentage_of_tiles <- c(swell$pc_pos_cov_gte1, swell$pc_pos_cov_gte5, swell$pc_pos_cov_gte10, swell$pc_pos_cov_gte20, swell$pc_pos_cov_gte50, swell$pc_pos_cov_gte100, swell$pc_pos_cov_gte200)
 pos_cov_df <- data.frame(positive_coverage , percentage_of_tiles)
@@ -13,7 +12,6 @@ ggplot(data = pos_cov_df, mapping = aes(x = positive_coverage, y = percentage_of
     scale_y_continuous(limits = c(0, 100)) +
     theme_bw()
 
-
 median_coverage <- c(">=1", ">=5", ">=10", ">=20", ">=50", ">=100", ">=200")
 percentage_of_tiles <- c(swell$pc_tiles_medcov_gte1, swell$pc_tiles_medcov_gte5, swell$pc_tiles_medcov_gte10, swell$pc_tiles_medcov_gte20, swell$pc_tiles_medcov_gte50, swell$pc_tiles_medcov_gte100, swell$pc_tiles_medcov_gte200)
 med_cov_df <- data.frame(median_coverage , percentage_of_tiles)
@@ -24,7 +22,6 @@ ggplot(data = med_cov_df, mapping = aes(x = median_coverage, y = percentage_of_t
     scale_x_discrete(limits=med_cov_df$median_coverage) +
     scale_y_continuous(limits = c(0, 100)) +
     theme_bw()
-
 
 depth <- unlist(strsplit(swell$tile_vector, split=','))
 tile_df <- data.frame(depth)
