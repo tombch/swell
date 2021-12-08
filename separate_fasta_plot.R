@@ -9,6 +9,9 @@ alpha_val = 0.4
 args <- commandArgs(trailingOnly = TRUE)
 swell <- read.table(file("stdin"), head=TRUE, sep='\t', na.strings=c("NaN", "-"))
 metadata <- read.table(args[1], head=TRUE, sep='\t', fill=TRUE)
+print(swell)
+print(metadata)
+
 df <- merge(x=swell, y=metadata, by.x="header", by.y="fasta_header")
 
 # Filter df by the past x days
