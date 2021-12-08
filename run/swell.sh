@@ -9,3 +9,4 @@ python3 get_seqs_metadata.py --outdir $out_dir --prefix $prefix --metadata-path 
 out_fasta_path="${out_dir}/${prefix}.fasta"
 out_metadata_path="${out_dir}/${prefix}.tsv"
 swell separate-fasta $out_fasta_path | Rscript ../separate_fasta_plot.R $out_metadata_path
+rm $out_fasta_path $out_metadata_path
