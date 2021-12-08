@@ -4,7 +4,7 @@ import pathlib
 import shutil
 import datetime
 
-# Code written by Sam Wilkinson
+# This program was written by Sam Wilkinson and has been modified for usage before swell
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--metadata-path")
@@ -28,23 +28,13 @@ if args.start_date or args.end_date:
         mask = (metadata['sequencing_submission_date'] <= args.end_date)
     metadata = metadata.loc[mask]
 
-if args.outdir and args.prefix:
-    out_fasta = open("%s/%s.fasta" % (args.outdir, args.prefix), "w")
-
-for index, row in metadata.iterrows():
-    fasta_path = "%sfasta/%s.%s.climb.fasta" % (
-        args.latest_dir,
-        row["central_sample_id"],
-        row["run_name"],
-    )
-    with open(fasta_path) as f:
-        if args.outdir and args.prefix:
-            for line in f:
+out_fasta_path = f"{args.outdir}/{args.prefix}.fasta"
+with open(out_fasta_path, "w") as out_fasta:
+    for index, row in metadata.iterrows():
+        fasta_path = f"{args.latest_dir}fasta/{row['central_sample_id']}.{row['run_name']}.climb.fasta"
+        with open(fasta_path) as fasta:
+            for line in fasta:
                 out_fasta.write(line)
-        else:
-            for line in f:
-                # Use for piping only!
-                print(line)
 
     # if args.get_bam:
     #     bam_name = f'{args.prefix}_{row["central_sample_id"]}.bam'
@@ -61,4 +51,4 @@ for index, row in metadata.iterrows():
     #     )
 
 if args.metadata:
-    metadata.to_csv("%s/%s.csv" % (args.outdir, args.prefix), index=False)
+    metadata.to_csv(f"{args.outdir}/{args.prefix}.tsv", index=False, sep='\t')

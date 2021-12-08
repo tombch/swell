@@ -1,5 +1,7 @@
 library(tidyverse)
 
+# Generating graphs similar to/the same as ones made by Nick Loman
+
 # num_days = 100
 # num_weeks = 5
 alpha_val = 0.4
