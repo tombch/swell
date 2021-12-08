@@ -187,6 +187,8 @@ def separate_swell_from_fasta(fasta_path):
                 prop_invalid = 100.0     
                
             header = (name.split('|'))[0]
+            if header.startswith('COG-UK'):
+                header = 'COGUK' + header[len('COG-UK'):]
             rows.append([fasta_path, header, num_seqs, num_bases, prop_acgt, prop_masked, prop_invalid, prop_ambiguous, max_gap, max_ungap])
 
     return ["fasta_path", "header", "num_seqs", "num_bases", "pc_acgt", "pc_masked", "pc_invalid", "pc_ambiguous", "longest_gap", "longest_ungap"], rows
