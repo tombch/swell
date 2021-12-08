@@ -8,7 +8,7 @@ import datetime
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--metadata-path")
-parser.add_argument("latest-dir")
+parser.add_argument("--latest-dir")
 parser.add_argument("-o", "--outdir", help="Directory to save fasta/metadata files", type=pathlib.Path, metavar="")
 parser.add_argument("-p", "--prefix", help="Prefix for outfiles", type=str, metavar="")
 parser.add_argument("-b", "--get_bam", help="Grab BAM files alongside consensus/metadata", action="store_true")
