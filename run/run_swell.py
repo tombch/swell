@@ -11,8 +11,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument("-l", "--latest-dir")
 parser.add_argument("-o", "--out-dir", help="Directory to save fasta/metadata files", type=pathlib.Path, metavar="")
 parser.add_argument("-b", "--swell-bam", help="", action="store_true")
-parser.add_argument("--bed", required=True)
-parser.add_argument("--ref", required=True)
+parser.add_argument("--bed")
+parser.add_argument("--ref")
 parser.add_argument("-s", "--start-date")
 parser.add_argument("-e", "--end-date")
 args = parser.parse_args()
@@ -23,6 +23,7 @@ metadata["sequencing_submission_date"] = pd.to_datetime(metadata["sequencing_sub
 
 prefix = f"swell_data_{args.start_date}_{args.end_date}"
 out_fasta_path = f"{args.out_dir}/{prefix}.fasta"
+out_bam_path = f"{args.out_dir}/{prefix}.bam"
 out_metadata_path = f"{args.out_dir}/{prefix}.tsv"
 metadata.to_csv(out_metadata_path, index=False, sep='\t')
 
@@ -58,6 +59,9 @@ with open(out_fasta_path, "w") as out_fasta:
             else:
                 swell_bam_data.append(data)
 
+with open(out_bam_path, "w") as out_bam:
+    for line in swell_bam_data:
+        out_bam.write(line)
 
 swell_fasta_out = subprocess.run(['swell', 'separate-fasta', out_fasta_path], capture_output=True)
 subprocess.run(['Rscript', '../separate_fasta_plot.R', out_metadata_path], input=swell_fasta_out.stdout)
