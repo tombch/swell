@@ -12,7 +12,6 @@ parser.add_argument("-l", "--latest-dir")
 parser.add_argument("-o", "--out-dir", help="Directory to save fasta/metadata files", type=pathlib.Path, metavar="")
 parser.add_argument("-b", "--swell-bam", help="", action="store_true")
 parser.add_argument("--bed")
-parser.add_argument("--ref")
 parser.add_argument("-s", "--start-date")
 parser.add_argument("-e", "--end-date")
 args = parser.parse_args()
@@ -51,8 +50,8 @@ with open(out_fasta_path, "w") as out_fasta:
             # index_name = f"{prefix}_{row['central_sample_id']}.bam.bai"
             # shutil.copyfile(bam_path, f"{args.outdir}/{bam_name}")
             # shutil.copyfile(index_path, f"{args.outdir}/{index_name}")
-            swell_bam_out = subprocess.run(['swell', 'bam', bam_path, '--ref', args.ref, '--bed', args.bed], capture_output=True)
-            header, data = swell_bam_out.stdout.decode('utf8').split('\n')
+            swell_bam_out = subprocess.run(['swell', 'bam', bam_path, '--ref', 'NC_045512', 'NC045512', 'MN908947.3', '--bed', args.bed], capture_output=True)
+            header, data = (swell_bam_out.stdout.decode('utf8')[:-1]).split('\n')
             if len(swell_bam_data) == 0:
                 swell_bam_data.append(header)
                 swell_bam_data.append(data)
