@@ -16,17 +16,19 @@ parser.add_argument("-s", "--start-date")
 parser.add_argument("-e", "--end-date")
 args = parser.parse_args()
 
-metadata_path = f"{args.latest_dir}majora.metadata.matched.tsv"
+print("Reading metadata into DataFrame...")
 metadata = pd.read_csv(metadata_path, sep="\t", low_memory=False)
-metadata["sequencing_submission_date"] = pd.to_datetime(metadata["sequencing_submission_date"], errors="coerce")
+print("Done.")
 
 prefix = f"swell_data_{args.start_date}_{args.end_date}"
+metadata_path = f"{args.latest_dir}majora.metadata.matched.tsv"
 out_fasta_path = f"{args.out_dir}/{prefix}.fasta"
 out_bam_data_path = f"{args.out_dir}/{prefix}_bam_data.tsv"
 out_metadata_path = f"{args.out_dir}/{prefix}_metadata.tsv"
-metadata.to_csv(out_metadata_path, index=False, sep='\t')
 
+metadata["sequencing_submission_date"] = pd.to_datetime(metadata["sequencing_submission_date"], errors="coerce")
 if args.start_date or args.end_date:
+    print("Filtering metadata by given start/end dates...")
     if args.start_date and args.end_date:
         mask = (metadata['sequencing_submission_date'] >= args.start_date) & (metadata['sequencing_submission_date'] <= args.end_date)
     elif args.start_date:
@@ -34,7 +36,12 @@ if args.start_date or args.end_date:
     elif args.end_date:
         mask = (metadata['sequencing_submission_date'] <= args.end_date)
     metadata = metadata.loc[mask]
+    print("Done.")
+print("Saving metadata to tsv in out-dir...")
+metadata.to_csv(out_metadata_path, index=False, sep='\t')
+print("Done.")
 
+print("Writing fasta data to multifasta (and optional swell of bam data to a tsv)...")
 with open(out_fasta_path, "w") as out_fasta, open(out_bam_data_path, "w") as out_bam:
     for i, (index, row) in enumerate(metadata.iterrows()):
         fasta_path = f"{args.latest_dir}fasta/{row['central_sample_id']}.{row['run_name']}.climb.fasta"
@@ -55,7 +62,11 @@ with open(out_fasta_path, "w") as out_fasta, open(out_bam_data_path, "w") as out
                 out_bam.write(f"{data}\n")
             else:
                 out_bam.write(f"{data}\n")
-
+print("Done.")
+print("Running swell on multifasta...")
 swell_fasta_out = subprocess.run(['swell', 'separate-fasta', out_fasta_path], capture_output=True)
+print("Done.")
+print("Generating fasta graphs...")
 subprocess.run(['Rscript', '../separate_fasta_plot.R', out_metadata_path], input=swell_fasta_out.stdout)
+print("Done.")
 subprocess.run(['rm', out_fasta_path, out_metadata_path])
