@@ -29,7 +29,7 @@ out_metadata_path = f"{args.out_dir}/{prefix}_metadata.tsv"
 
 metadata["sequencing_submission_date"] = pd.to_datetime(metadata["sequencing_submission_date"], errors="coerce")
 if args.start_date or args.end_date:
-    print("Filtering metadata by given start/end dates... ", end=" ", flush=True)
+    print("Filtering metadata by given start/end dates...", end=" ", flush=True)
     if args.start_date and args.end_date:
         mask = (metadata['sequencing_submission_date'] >= args.start_date) & (metadata['sequencing_submission_date'] <= args.end_date)
     elif args.start_date:
@@ -38,11 +38,11 @@ if args.start_date or args.end_date:
         mask = (metadata['sequencing_submission_date'] <= args.end_date)
     metadata = metadata.loc[mask]
     print("done.")
-print("Saving metadata to tsv in out-dir... ", end=" ", flush=True)
+print("Saving metadata to tsv in out-dir...", end=" ", flush=True)
 metadata.to_csv(out_metadata_path, index=False, sep='\t')
 print("done.")
 
-print("Writing fasta data to multifasta (and optional swell of bam data to a tsv)... ", end=" ", flush=True)
+print("Writing fasta data to multifasta (and optional swell of bam data to a tsv)...", end=" ", flush=True)
 with open(out_fasta_path, "w") as out_fasta, open(out_bam_data_path, "w") as out_bam:
     for i, (index, row) in enumerate(metadata.iterrows()):
         fasta_path = f"{args.latest_dir}fasta/{row['central_sample_id']}.{row['run_name']}.climb.fasta"
@@ -64,10 +64,10 @@ with open(out_fasta_path, "w") as out_fasta, open(out_bam_data_path, "w") as out
             else:
                 out_bam.write(f"{data}\n")
 print("done.")
-print("Running swell on multifasta... ", end=" ", flush=True)
+print("Running swell on multifasta...", end=" ", flush=True)
 swell_fasta_out = subprocess.run(['swell', 'separate-fasta', out_fasta_path], capture_output=True)
 print("done.")
-print("Generating fasta graphs... ", end=" ", flush=True)
+print("Generating fasta graphs...", end=" ", flush=True)
 subprocess.run(['Rscript', args.graph_path, out_metadata_path], input=swell_fasta_out.stdout)
 print("done.")
 subprocess.run(['rm', out_fasta_path, out_metadata_path])
