@@ -17,11 +17,11 @@ parser.add_argument("-e", "--end-date")
 args = parser.parse_args()
 
 print("Reading metadata into DataFrame...")
+metadata_path = f"{args.latest_dir}majora.metadata.matched.tsv"
 metadata = pd.read_csv(metadata_path, sep="\t", low_memory=False)
 print("Done.")
 
 prefix = f"swell_data_{args.start_date}_{args.end_date}"
-metadata_path = f"{args.latest_dir}majora.metadata.matched.tsv"
 out_fasta_path = f"{args.out_dir}/{prefix}.fasta"
 out_bam_data_path = f"{args.out_dir}/{prefix}_bam_data.tsv"
 out_metadata_path = f"{args.out_dir}/{prefix}_metadata.tsv"
