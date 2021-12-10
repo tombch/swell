@@ -10,8 +10,8 @@ import subprocess
 parser = argparse.ArgumentParser()
 parser.add_argument("-l", "--latest-dir")
 parser.add_argument("-o", "--out-dir", help="Directory to save fasta/metadata files", type=pathlib.Path, metavar="")
-parser.add_argument("-b", "--swell-bam", help="", action="store_true")
-parser.add_argument("--bed")
+parser.add_argument("--swell-bam", help="", action="store_true")
+parser.add_argument("-b", "--bed")
 parser.add_argument("-s", "--start-date")
 parser.add_argument("-e", "--end-date")
 args = parser.parse_args()
@@ -22,8 +22,8 @@ metadata["sequencing_submission_date"] = pd.to_datetime(metadata["sequencing_sub
 
 prefix = f"swell_data_{args.start_date}_{args.end_date}"
 out_fasta_path = f"{args.out_dir}/{prefix}.fasta"
-out_bam_path = f"{args.out_dir}/{prefix}.bam"
-out_metadata_path = f"{args.out_dir}/{prefix}.tsv"
+out_bam_data_path = f"{args.out_dir}/{prefix}_bam_data.tsv"
+out_metadata_path = f"{args.out_dir}/{prefix}_metadata.tsv"
 metadata.to_csv(out_metadata_path, index=False, sep='\t')
 
 if args.start_date or args.end_date:
@@ -35,14 +35,12 @@ if args.start_date or args.end_date:
         mask = (metadata['sequencing_submission_date'] <= args.end_date)
     metadata = metadata.loc[mask]
 
-swell_bam_data = []
-with open(out_fasta_path, "w") as out_fasta:
-    for index, row in metadata.iterrows():
+with open(out_fasta_path, "w") as out_fasta, open(out_bam_data_path, "w") as out_bam:
+    for i, (index, row) in enumerate(metadata.iterrows()):
         fasta_path = f"{args.latest_dir}fasta/{row['central_sample_id']}.{row['run_name']}.climb.fasta"
         with open(fasta_path) as fasta:
             for line in fasta:
                 out_fasta.write(line)
-
         if args.swell_bam:
             bam_path = f"{args.latest_dir}alignment/{row['central_sample_id']}.{row['run_name']}.climb.bam"
             # index_path = f"{args.latest_dir}alignment/{row['central_sample_id']}.{row['run_name']}.climb.bam.bai"
@@ -52,15 +50,11 @@ with open(out_fasta_path, "w") as out_fasta:
             # shutil.copyfile(index_path, f"{args.outdir}/{index_name}")
             swell_bam_out = subprocess.run(['swell', 'bam', bam_path, '--ref', 'NC_045512', 'NC045512', 'MN908947.3', '--bed', args.bed], capture_output=True)
             header, data = (swell_bam_out.stdout.decode('utf8')[:-1]).split('\n')
-            if len(swell_bam_data) == 0:
-                swell_bam_data.append(header)
-                swell_bam_data.append(data)
+            if i == 0:
+                out_bam.write(f"{header}\n")
+                out_bam.write(f"{data}\n")
             else:
-                swell_bam_data.append(data)
-
-with open(out_bam_path, "w") as out_bam:
-    for line in swell_bam_data:
-        out_bam.write(line)
+                out_bam.write(f"{data}\n")
 
 swell_fasta_out = subprocess.run(['swell', 'separate-fasta', out_fasta_path], capture_output=True)
 subprocess.run(['Rscript', '../separate_fasta_plot.R', out_metadata_path], input=swell_fasta_out.stdout)
