@@ -35,6 +35,21 @@ ggplot(data = df, mapping = aes(x = pc_ambiguous, y = 0)) +
     theme_bw() +
     theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank(), panel.grid.major.y=element_blank())
 
+# Percentage acgt scatterplot, faceted by sequencing org and run name
+ggplot(data = df, mapping = aes(x = pc_acgt, y = 0)) +
+    geom_jitter(width = 0, alpha = alpha_val) +
+    facet_wrap(run_name ~ sequencing_org_code, ncol=1, scale="free_y") + 
+    scale_y_continuous(breaks = NULL) +
+    theme_bw() +
+    theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank(), panel.grid.major.y=element_blank()) 
+# Percentage ambiguous scatterplot, faceted by sequencing org and run name
+ggplot(data = df, mapping = aes(x = pc_ambiguous, y = 0)) +
+    geom_jitter(width = 0, alpha = alpha_val) +
+    facet_wrap(run_name ~ sequencing_org_code, ncol=1, scale="free_y") + 
+    scale_y_continuous(breaks = NULL) +
+    theme_bw() +
+    theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank(), panel.grid.major.y=element_blank())
+
 # Percentage acgt histogram, faceted by sequencing org
 ggplot(data = df, mapping = aes(x = pc_acgt)) +
     geom_histogram() + 
@@ -49,12 +64,12 @@ ggplot(data = df, mapping = aes(x = pc_ambiguous)) +
 # Percentage acgt histogram, faceted by sequencing org and run name
 ggplot(data = df, mapping = aes(x = pc_acgt)) +
     geom_histogram() + 
-    facet_grid(run_name ~ sequencing_org_code, ncol=1, scale="free_y") + 
+    facet_wrap(run_name ~ sequencing_org_code, ncol=1, scale="free_y") + 
     theme_bw()
 # Percentage ambiguous histogram, faceted by sequencing org and run name
 ggplot(data = df, mapping = aes(x = pc_ambiguous)) +
     geom_histogram() +
-    facet_grid(run_name ~ sequencing_org_code, ncol=1, scale="free_y") + 
+    facet_wrap(run_name ~ sequencing_org_code, ncol=1, scale="free_y") + 
     theme_bw()
 
 # Average pc_acgt per ISO week, coloured by sequencing org
