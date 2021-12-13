@@ -10,6 +10,7 @@ parser.add_argument('--out-dir', help='Directory to save swell files', required=
 parser.add_argument('-f', '--multifasta-graph')
 parser.add_argument('-s', '--start-date')
 parser.add_argument('-e', '--end-date')
+args = parser.parse_args()
 
 print("Reading metadata into DataFrame...", end=" ", flush=True)
 metadata = pd.read_csv(args.metadata, sep="\t", low_memory=False)
@@ -39,7 +40,7 @@ if args.multifasta:
     print("done.")
     if args.multifasta_graph:
         print("Generating fasta graphs...", end=" ", flush=True)
-        subprocess.run(['Rscript', args.multifasta_graph, swell_multifasta, filtered_metadata_path])
+        subprocess.run(['Rscript', args.multifasta_graph, filtered_metadata_path], input=swell_multifasta.stdout)
         print("done.")
 
 print("Removing temporary files...", end=" ", flush=True)
