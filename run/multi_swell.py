@@ -87,6 +87,7 @@ if args.start_date or args.end_date:
 prefix = f"swell_{args.start_date}_{args.end_date}"
 date_filtered_metadata_path = f"{args.temp_dir}/{prefix}_metadata.tsv"
 date_filtered_multifasta_path = f"{args.temp_dir}/{prefix}_multifasta.fasta"
+swell_multifasta_path = f"{args.temp_dir}/{prefix}_swell_multifasta.tsv"
 metadata.to_csv(date_filtered_metadata_path, index=False, sep='\t')
 
 
@@ -103,15 +104,16 @@ if args.multifasta:
         multifasta_path = args.multifasta
     
     print("Running swell on multifasta...", end=" ", flush=True)
-    swell_multifasta = subprocess.run(['swell', 'separate-fasta', multifasta_path], capture_output=True)
+    with open(swell_multifasta_path, "w") as swell_multifasta:
+        subprocess.run(['swell', 'separate-fasta', multifasta_path], stdout=swell_multifasta)
     print("done.")
     
     if args.multifasta_graph:
         print("Generating graphs of swell multifasta data...")
-        subprocess.run(['Rscript', args.multifasta_graph, date_filtered_metadata_path], input=swell_multifasta.stdout)
+        subprocess.run(['Rscript', args.multifasta_graph, swell_multifasta_path, date_filtered_metadata_path])
         print("done.")
 
 
 print("Removing temporary files...", end=" ", flush=True)
-subprocess.run(['rm', date_filtered_metadata_path, date_filtered_multifasta_path])
+subprocess.run(['rm', swell_multifasta_path, date_filtered_metadata_path, date_filtered_multifasta_path])
 print("done.")
