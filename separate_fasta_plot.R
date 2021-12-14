@@ -1,4 +1,5 @@
 library(tidyverse)
+library(ggforce)
 
 # Generating graphs similar to/the same as ones made by Nick Loman
 
@@ -32,7 +33,7 @@ print(ggplot(data = df, mapping = aes(x = pc_acgt)) +
 print(ggplot(data = df, mapping = aes(x = sequencing_submission_week, y = pc_acgt, colour = sequencing_org_code)) + 
     geom_point(stat = "summary", fun = "mean") + 
     geom_line(stat = "summary", fun = "mean") + 
-    labs(y = "avg"))
+    labs(y = "average pc_acgt"))
 
 # Percentage ambiguous scatterplot, sequencing org on x axis
 print(ggplot(data = df, mapping = aes(x = sequencing_org_code, y = pc_ambiguous)) +
@@ -54,35 +55,39 @@ print(ggplot(data = df, mapping = aes(x = pc_ambiguous)) +
 print(ggplot(data = df, mapping = aes(x = sequencing_submission_week, y = pc_ambiguous, colour = sequencing_org_code)) + 
     geom_point(stat = "summary", fun = "mean") + 
     geom_line(stat = "summary", fun = "mean") + 
-    labs(y = "avg"))
+    labs(y = "average pc_ambiguous"))
 
 # Get unique sequencing_org_codes
 seq_org_codes <- unique(df$sequencing_org_code)
 # Loop through sequencing_org_codes to create separate graphs for each
 for(code in seq_org_codes){
     current_df <- filter(df, sequencing_org_code == code)
-    # Percentage acgt scatterplot, faceted by sequencing org and run name
-    print(ggplot(data = current_df, mapping = aes(x = pc_acgt, y = 0)) +
-        geom_jitter(width = 0, alpha = alpha_val) +
-        facet_wrap(sequencing_org_code ~ run_name, ncol=3, scale="free_y") + 
-        scale_y_continuous(breaks = NULL) +
-        theme_bw() +
-        theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank(), panel.grid.major.y=element_blank()))
-    # Percentage acgt histogram, faceted by sequencing org and run name
-    print(ggplot(data = current_df, mapping = aes(x = pc_acgt)) +
-        geom_histogram() + 
-        facet_wrap(sequencing_org_code ~ run_name, ncol=3, scale="free_y") + 
-        theme_bw())
-    # Percentage ambiguous scatterplot, faceted by sequencing org and run name
-    print(ggplot(data = current_df, mapping = aes(x = pc_ambiguous, y = 0)) +
-        geom_jitter(width = 0, alpha = alpha_val) +
-        facet_wrap(sequencing_org_code ~ run_name, ncol=3, scale="free_y") + 
-        scale_y_continuous(breaks = NULL) +
-        theme_bw() +
-        theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank(), panel.grid.major.y=element_blank()))
-    # Percentage ambiguous histogram, faceted by sequencing org and run name
-    print(ggplot(data = current_df, mapping = aes(x = pc_ambiguous)) +
-        geom_histogram() +
-        facet_wrap(sequencing_org_code ~ run_name, ncol=3, scale="free_y") + 
-        theme_bw())
+    run_names <- unique(current_df$run_name)
+    num_pages <- ceiling(length(run_names) / 9)
+    for(page_num in seq(1, num_pages)){
+        # Percentage acgt scatterplot, faceted by sequencing org and run name
+        print(ggplot(data = current_df, mapping = aes(x = pc_acgt, y = 0)) +
+            geom_jitter(width = 0, alpha = alpha_val) +
+            facet_wrap_paginate(sequencing_org_code ~ run_name, ncol=3, scale="free_y", page=page_num) + 
+            scale_y_continuous(breaks = NULL) +
+            theme_bw() +
+            theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank(), panel.grid.major.y=element_blank()))
+        # Percentage acgt histogram, faceted by sequencing org and run name
+        print(ggplot(data = current_df, mapping = aes(x = pc_acgt)) +
+            geom_histogram() + 
+            facet_wrap_paginate(sequencing_org_code ~ run_name, ncol=3, scale="free_y", page=page_num) + 
+            theme_bw())
+        # Percentage ambiguous scatterplot, faceted by sequencing org and run name
+        print(ggplot(data = current_df, mapping = aes(x = pc_ambiguous, y = 0)) +
+            geom_jitter(width = 0, alpha = alpha_val) +
+            facet_wrap_paginate(sequencing_org_code ~ run_name, ncol=3, scale="free_y", page=page_num) + 
+            scale_y_continuous(breaks = NULL) +
+            theme_bw() +
+            theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank(), panel.grid.major.y=element_blank()))
+        # Percentage ambiguous histogram, faceted by sequencing org and run name
+        print(ggplot(data = current_df, mapping = aes(x = pc_ambiguous)) +
+            geom_histogram() +
+            facet_wrap_paginate(sequencing_org_code ~ run_name, ncol=3, scale="free_y", page=page_num) + 
+            theme_bw())
+    }
 }
