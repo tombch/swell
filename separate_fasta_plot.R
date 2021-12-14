@@ -8,6 +8,7 @@ args <- commandArgs(trailingOnly = TRUE)
 swell <- read.table(file("stdin"), head=TRUE, sep='\t', na.strings=c("NaN", "-"))
 metadata <- read.table(args[1], head=TRUE, sep='\t', fill=TRUE)
 df <- merge(x=swell, y=metadata, by.x="header", by.y="fasta_header")
+
 # Calculate ISO week for each resulting entry
 df$sequencing_submission_week = as.integer(strftime(df$sequencing_submission_date, format="%V"))
 
