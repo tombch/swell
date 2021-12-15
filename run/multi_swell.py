@@ -110,7 +110,7 @@ if args.multifasta:
     
     if args.multifasta_graph:
         print("Generating graphs of swell multifasta data...")
-        subprocess.run(['Rscript', args.multifasta_graph, swell_multifasta_path, date_filtered_metadata_path])
+        subprocess.run(['Rscript', args.multifasta_graph, swell_multifasta_path, date_filtered_metadata_path, str(args.start_date), str(args.end_date)])
         print("done.")
 
 
