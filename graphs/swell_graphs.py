@@ -41,6 +41,7 @@ parser.add_argument('--metadata', required=True, help='Path to sample metadata')
 parser.add_argument('--temp-dir', required=True, help='Directory to save temporary files')
 parser.add_argument('--multifasta', help='Path to multifasta file')
 parser.add_argument('--multifasta-graph', help='Path to graphs that use swell stats generated from the multifasta')
+parser.add_argument('--graph-runs', action='store_true', help='If included, PDFs displaying runs for each sequencing organisation will also be created.')
 parser.add_argument('-s', '--start-date', help='Minimum sequencing_submission_date for a sample to be included in swell run')
 parser.add_argument('-e', '--end-date', help='Maximum sequencing_submission_date for a sample to be included in swell run')
 args = parser.parse_args()
@@ -110,7 +111,10 @@ if args.multifasta:
     
     if args.multifasta_graph:
         print("Generating graphs of swell multifasta data...")
-        subprocess.run(['Rscript', args.multifasta_graph, swell_multifasta_path, date_filtered_metadata_path, str(args.start_date), str(args.end_date)])
+        if args.graph_runs:
+            subprocess.run(['Rscript', args.multifasta_graph, swell_multifasta_path, date_filtered_metadata_path, str(args.start_date), str(args.end_date), "True"])
+        else:
+            subprocess.run(['Rscript', args.multifasta_graph, swell_multifasta_path, date_filtered_metadata_path, str(args.start_date), str(args.end_date), "False"])
         print("done.")
 
 
