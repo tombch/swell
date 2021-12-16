@@ -86,26 +86,22 @@ if (graph_runs == "True") {
             # Percentage acgt scatterplot
             p1 = ggplot(data = run_df, mapping = aes(x = pc_acgt, y = 0)) +
                 geom_jitter(width = 0, alpha = alpha_val) +
-                scale_x_continuous(limits = c(0, 100)) +
                 scale_y_continuous(breaks = NULL) +
                 theme_bw() +
                 theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank(), panel.grid.major.y=element_blank())
             # Percentage acgt histogram
             p2 = ggplot(data = run_df, mapping = aes(x = pc_acgt)) +
                 geom_histogram() + 
-                scale_x_continuous(limits = c(0, 100)) +
                 theme_bw()
             # Percentage ambiguous scatterplot
             p3 = ggplot(data = run_df, mapping = aes(x = pc_ambiguous, y = 0)) +
                 geom_jitter(width = 0, alpha = alpha_val) +
-                scale_x_continuous(limits = c(0, 100)) +
                 scale_y_continuous(breaks = NULL) +
                 theme_bw() +
                 theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank(), panel.grid.major.y=element_blank())
             # Percentage ambiguous histogram
             p4 = ggplot(data = run_df, mapping = aes(x = pc_ambiguous)) +
                 geom_histogram() +
-                scale_x_continuous(limits = c(0, 100)) +
                 theme_bw()
             # Organise into grid
             print(grid.arrange(p1, p2, p3, p4, ncol=2, nrow=2, top = run))
