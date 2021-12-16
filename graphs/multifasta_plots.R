@@ -1,6 +1,9 @@
 library(tidyverse)
 library(gridExtra)
 
+# Prevent Rplots.pdf generation
+pdf(NULL)
+
 #Read and merge data
 args <- commandArgs(trailingOnly = TRUE)
 swell <- read.table(args[1], head=TRUE, sep='\t', na.strings=c("NaN", "-"))
@@ -11,7 +14,7 @@ graph_runs <- args[5]
 df <- merge(x=swell, y=metadata, by.x="header", by.y="fasta_header")
 
 # Calculate ISO week for each resulting entry
-df$sequencing_submission_week = as.integer(strftime(df$sequencing_submission_date, format="%V"))
+df$sequencing_submission_week = strftime(df$sequencing_submission_date, format="%V")
 
 # Change LOND_BART to BART for readability when sequencing_org_code is on x axis
  df$sequencing_org_code[df$sequencing_org_code=="LOND_BART"] <- "BART"
@@ -30,6 +33,9 @@ if ((start_date != "None") && (end_date != "None")) {
     prefix = paste("all", sep="_")
 }
 
+# PNG width and height
+w = 16
+h = 6
 
 # Average pc_acgt per ISO week, coloured by sequencing org
 acgt_iso = ggplot(data = df, mapping = aes(x = sequencing_submission_week, y = pc_acgt, colour = sequencing_org_code)) + 
@@ -43,7 +49,7 @@ ambig_iso = ggplot(data = df, mapping = aes(x = sequencing_submission_week, y = 
     labs(y = "avg pc_ambiguous")
 # Organise into grid
 iso = grid.arrange(acgt_iso, ambig_iso, ncol=2, nrow=1)
-ggsave(paste(prefix, "iso_week.png", sep="_"), iso, width=16, height=4)
+ggsave(paste(prefix, "iso_week.png", sep="_"), iso, width=w, height=h)
 
 
 # Percentage acgt scatterplot, sequencing org on x axis
@@ -56,7 +62,7 @@ ambig_scatter_seq = ggplot(data = df, mapping = aes(x = sequencing_org_code, y =
     theme_bw()
 # Organise into grid
 scatter_seq = grid.arrange(acgt_scatter_seq, ambig_scatter_seq, ncol=2, nrow=1)
-ggsave(paste(prefix, "scatter_seq.png", sep="_"), scatter_seq, width=16, height=4)
+ggsave(paste(prefix, "scatter_seq.png", sep="_"), scatter_seq, width=w, height=h)
 
 
 # Percentage acgt violin, sequencing org on x axis
@@ -69,7 +75,7 @@ ambig_violin = ggplot(data = df, mapping = aes(x = sequencing_org_code, y = pc_a
     theme_bw()
 # Organise into grid
 violin = grid.arrange(acgt_violin, ambig_violin, ncol=2, nrow=1)
-ggsave(paste(prefix, "violin.png", sep="_"), violin, width=16, height=4)
+ggsave(paste(prefix, "violin.png", sep="_"), violin, width=w, height=h)
 
 
 # Percentage acgt boxplot, sequencing org on x axis
@@ -82,7 +88,7 @@ ambig_boxplot = ggplot(data = df, mapping = aes(x = sequencing_org_code, y = pc_
     theme_bw()
 # Organise into grid
 boxplot = grid.arrange(acgt_boxplot, ambig_boxplot, ncol=2, nrow=1)
-ggsave(paste(prefix, "boxplot.png", sep="_"), boxplot, width=16, height=4)
+ggsave(paste(prefix, "boxplot.png", sep="_"), boxplot, width=w, height=h)
 
 
 # Percentage acgt scatterplot, faceted by sequencing org
@@ -101,7 +107,7 @@ ambig_scatter = ggplot(data = df, mapping = aes(x = pc_ambiguous, y = 0)) +
     theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank(), panel.grid.major.y=element_blank())
 # Organise into grid
 scatter = grid.arrange(acgt_scatter, ambig_scatter, ncol=2, nrow=1)
-ggsave(paste(prefix, "scatter.png", sep="_"), scatter, width=16, height=4)
+ggsave(paste(prefix, "scatter.png", sep="_"), scatter, width=w, height=h)
 
 
 # Percentage acgt scatterplot, week on y axis, faceted by sequencing org
@@ -115,7 +121,7 @@ ambig_scatter_week = ggplot(data = df, mapping = aes(x = pc_ambiguous, y = seque
     facet_wrap(. ~ sequencing_org_code, ncol=3, scale="free_y") + 
     theme_bw()
 scatter_week = grid.arrange(acgt_scatter_week, ambig_scatter_week, ncol=2, nrow=1)
-ggsave(paste(prefix, "scatter_week.png", sep="_"), scatter_week, width=16, height=4)
+ggsave(paste(prefix, "scatter_week.png", sep="_"), scatter_week, width=w, height=h)
 
 
 # Percentage acgt histogram, faceted by sequencing org
@@ -129,7 +135,7 @@ ambig_hist = ggplot(data = df, mapping = aes(x = pc_ambiguous)) +
     facet_wrap(. ~ sequencing_org_code, ncol=3, scale="free_y") + 
     theme_bw()
 hist = grid.arrange(acgt_hist, ambig_hist, ncol=2, nrow=1)
-ggsave(paste(prefix, "hist.png", sep="_"), hist, width=16, height=4)
+ggsave(paste(prefix, "hist.png", sep="_"), hist, width=w, height=h)
 
 
 seq_org_codes <- unique(df$sequencing_org_code)
@@ -137,20 +143,19 @@ for (code in seq_org_codes) {
     code_df <- filter(df, sequencing_org_code == code)
     runs <- sort(unique(code_df$run_name), decreasing = FALSE)
 
-
     # Average pc_acgt per ISO week, coloured by sequencing org
-    acgt_iso_runs = ggplot(data = code_df, mapping = aes(x = sequencing_submission_week, y = pc_acgt, colour = run_name)) + 
+    acgt_iso_runs = ggplot(data = code_df, mapping = aes(x = sequencing_submission_week, y = pc_acgt, group = run_name)) + 
         geom_point(stat = "summary", fun = "mean") + 
         geom_line(stat = "summary", fun = "mean") + 
         labs(y = "average pc_acgt")
     # Average pc_ambiguous per ISO week, coloured by run_name
-    ambig_iso_runs = ggplot(data = code_df, mapping = aes(x = sequencing_submission_week, y = pc_ambiguous, colour = run_name)) + 
+    ambig_iso_runs = ggplot(data = code_df, mapping = aes(x = sequencing_submission_week, y = pc_ambiguous, group = run_name)) + 
         geom_point(stat = "summary", fun = "mean") + 
         geom_line(stat = "summary", fun = "mean") + 
         labs(y = "average pc_ambiguous")
     # Organise into grid
     iso_runs = grid.arrange(acgt_iso_runs, ambig_iso_runs, ncol=2, nrow=1, top = code)
-    ggsave(paste(prefix, code, "runs_iso_week.png", sep="_"), iso_runs, width=16, height=4)
+    ggsave(paste(prefix, code, "runs_iso_week.png", sep="_"), iso_runs, width=w, height=h)
 
 
     # Percentage acgt violin, ISO week on x axis
@@ -163,7 +168,7 @@ for (code in seq_org_codes) {
         theme_bw()
     # Organise into grid
     violin_iso = grid.arrange(acgt_violin_iso, ambig_violin_iso, ncol=2, nrow=1)
-    ggsave(paste(prefix, code, "violin_iso_week.png", sep="_"), violin_iso, width=16, height=4)
+    ggsave(paste(prefix, code, "violin_iso_week.png", sep="_"), violin_iso, width=w, height=h)
 
 
     # Percentage acgt boxplot, ISO week on x axis
@@ -176,7 +181,7 @@ for (code in seq_org_codes) {
         theme_bw()
     # Organise into grid
     boxplot_iso = grid.arrange(acgt_boxplot_iso, ambig_boxplot_iso, ncol=2, nrow=1)
-    ggsave(paste(prefix, code, "boxplot_iso_week.png", sep="_"), boxplot_iso, width=16, height=4)
+    ggsave(paste(prefix, code, "boxplot_iso_week.png", sep="_"), boxplot_iso, width=w, height=h)
 }
 
 
