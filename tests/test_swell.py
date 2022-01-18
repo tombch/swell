@@ -15,9 +15,9 @@ def test_load_scheme():
     assert swell.load_scheme(bed_path) == old_swell.load_scheme(bed_path)
 
 
-def test_group_swell_from_fasta():
+def test_average_swell_from_fasta():
     old_header, old_fields = old_swell.swell_from_fasta(fasta_path)
-    new_header, new_fields = swell.group_swell_from_fasta(fasta_path)
+    new_header, new_fields = swell.average_swell_from_fasta(fasta_path)
     new_fields = new_fields[0]
     new_indexes = [1, 7] # Positions of new data returned by swell (header and pc_ambiguous columns)
     matching_new_header = []
@@ -29,9 +29,9 @@ def test_group_swell_from_fasta():
     assert matching_new_header == old_header and matching_new_fields == old_fields
 
 
-def test_separate_swell_from_fasta():
+def test_swell_from_fasta():
     old_header, old_fields = old_swell.swell_from_fasta(fasta_path)
-    new_header, new_fields = swell.separate_swell_from_fasta(fasta_path)
+    new_header, new_fields = swell.swell_from_fasta(fasta_path)
     new_fields = new_fields[0]
     new_indexes = [1, 7] # Positions of new data returned by swell (header and pc_ambiguous columns)
     matching_new_header = []
