@@ -3,7 +3,6 @@ import sys
 import pysam
 import numpy as np
 import re
-import math
 from . import readfq # thanks heng
 
 
@@ -426,6 +425,19 @@ def main():
     depth_parser.add_argument("--dp", default=2, type=int, required=False)
     depth_parser.add_argument("-x", action="append", nargs=2, metavar=("key", "value",))
 
+    fasta_bam_parser = subparsers.add_parser("fasta-bam")
+    fasta_bam_parser.add_argument("fasta_path")
+    fasta_bam_parser.add_argument("--average", action="store_true")
+    fasta_bam_parser.add_argument("bam_path")
+    fasta_bam_parser.add_argument("--bed", required=True)
+    fasta_bam_parser.add_argument("--ref", required=True, nargs='+')
+    fasta_bam_parser.add_argument("--thresholds", action='append', type=int, nargs='+', default=[1, 5, 10, 20, 50, 100, 200])
+    fasta_bam_parser.add_argument("--min-pos", type=int, required=False)
+    fasta_bam_parser.add_argument("--min-pos-allow-total-zero", action="store_true")
+    fasta_bam_parser.add_argument("--no-tile-clipping", action="store_true")
+    fasta_bam_parser.add_argument("--dp", default=2, type=int, required=False)
+    fasta_bam_parser.add_argument("-x", action="append", nargs=2, metavar=("key", "value",))
+
     args = parser.parse_args()
 
     header = []
@@ -437,15 +449,30 @@ def main():
                 header_, fields_ = swell_from_fasta(args.fasta_path)
             else:
                 header_, fields_ = average_swell_from_fasta(args.fasta_path)
+            header.extend(header_)
+            fields.extend(fields_)
         elif args.command == "bam":
             tiles = load_scheme(args.bed, args.no_tile_clipping)
             header_, fields_ = swell_from_bam(args.bam_path, tiles, args.ref, args.thresholds, min_pos=args.min_pos, min_pos_total_zero=args.min_pos_allow_total_zero)
+            header.extend(header_)
+            fields.extend(fields_)
         elif args.command == "depth":
             tiles = load_scheme(args.bed, args.no_tile_clipping)
-            header_, fields_ = swell_from_depth(args.depth_path, tiles, args.ref, args.thresholds, min_pos=args.min_pos, min_pos_total_zero=args.min_pos_allow_total_zero)    
-        header.extend(header_)
-        fields.extend(fields_)
-
+            header_, fields_ = swell_from_depth(args.depth_path, tiles, args.ref, args.thresholds, min_pos=args.min_pos, min_pos_total_zero=args.min_pos_allow_total_zero)
+            header.extend(header_)
+            fields.extend(fields_)
+        elif args.command == "fasta-bam":
+            if (not args.average):
+                header_, fields_ = swell_from_fasta(args.fasta_path)
+            else:
+                header_, fields_ = average_swell_from_fasta(args.fasta_path)  
+            header.extend(header_)
+            fields.extend(fields_)
+            tiles = load_scheme(args.bed, args.no_tile_clipping)
+            header_, fields_ = swell_from_bam(args.bam_path, tiles, args.ref, args.thresholds, min_pos=args.min_pos, min_pos_total_zero=args.min_pos_allow_total_zero)
+            header.extend(header_)
+            fields[0].extend(fields_[0])
+        
         keys = []
         values = []
         if args.x:
