@@ -1,9 +1,10 @@
-import argparse
+import re
 import sys
 import pysam
+import argparse
 import numpy as np
-import re
 from . import readfq # thanks heng
+import time
 
 
 def clip_tiles(tiles):
@@ -103,67 +104,54 @@ def swell_from_fasta(fasta_path):
         num_masked = 0
         num_invalid = 0
         num_ambiguous = 0
-
-        n_ungaps = []
-        n_gaps = []
-        curr_gap_len = 0
-        curr_ungap_len = 0
-
+        current_gap = 0
+        current_ungap = 0
+        max_gap = 0
+        max_ungap = 0
         prop_acgt = 0
         prop_masked = 0
         prop_invalid = 0
         prop_ambiguous = 0
-        max_gap = 0
-        max_ungap = 0
 
         for base in seq:
             num_bases += 1
-            gap = 1
 
             if base.upper() in 'ACGT':
                 num_acgt += 1
-                gap = 0
-            elif base.upper() in 'NX':
-                num_masked += 1
+                current_ungap += 1
+                if current_gap > max_gap:
+                    max_gap = current_gap
+                current_gap = 0
+
             elif base.upper() in 'WSMKRYBDHV':
                 num_ambiguous += 1
-                gap = 0
+                current_ungap += 1
+                if current_gap > max_gap:
+                    max_gap = current_gap
+                current_gap = 0
+            
+            elif base.upper() in 'NX':
+                num_masked += 1
+                current_gap += 1
+                if current_ungap > max_ungap:
+                    max_ungap = current_ungap
+                current_ungap = 0
+            
             else:
                 num_invalid += 1
-
-            if gap:
-                if curr_ungap_len > 0:
-                    n_ungaps.append(curr_ungap_len)
-                    curr_ungap_len = 0
-                curr_gap_len += 1
-            elif not gap:
-                if curr_gap_len > 0:
-                    n_gaps.append(curr_gap_len)
-                    curr_gap_len = 0
-                curr_ungap_len += 1
-
-        if curr_gap_len > 0:
-            n_gaps.append(curr_gap_len)
-        elif curr_ungap_len > 0:
-            n_gaps.append(curr_ungap_len)
+                current_gap += 1
+                if current_ungap > max_ungap:
+                    max_ungap = current_ungap
+                current_ungap = 0
 
         if num_bases > 0:
             prop_acgt = num_acgt / num_bases * 100.0
             prop_masked = num_masked / num_bases * 100.0
             prop_invalid = num_invalid / num_bases * 100.0
             prop_ambiguous = num_ambiguous / num_bases * 100.0
-
-            if len(n_gaps) > 0:
-                max_gap = max(n_gaps)
-            else:
-                max_gap = 0
-
-            if len(n_ungaps) > 0:
-                max_ungap = max(n_ungaps)
-            else:
-                max_ungap = 0
         else:
-            prop_invalid = 100.0     
+            prop_invalid = 100.0
+
         # TODO: is this reliable
         header = (name.split('|'))[0]
         rows.append([fasta_path, header, num_seqs, num_bases, prop_acgt, prop_masked, prop_invalid, prop_ambiguous, max_gap, max_ungap])
@@ -171,7 +159,7 @@ def swell_from_fasta(fasta_path):
     return ["fasta_path", "header", "num_seqs", "num_bases", "pc_acgt", "pc_masked", "pc_invalid", "pc_ambiguous", "longest_gap", "longest_ungap"], rows
 
 
-def average_swell_from_fasta(fasta_path):
+def summarise_swell_from_fasta(fasta_path):
     if fasta_path == "-":
         fastas = readfq.readfq(sys.stdin)
     else:
@@ -183,68 +171,55 @@ def average_swell_from_fasta(fasta_path):
     num_masked = 0
     num_invalid = 0
     num_ambiguous = 0
-
-    n_ungaps = []
-    n_gaps = []
-    curr_gap_len = 0
-    curr_ungap_len = 0
-
+    current_gap = 0
+    current_ungap = 0
+    max_gap = 0
+    max_ungap = 0
     prop_acgt = 0
     prop_masked = 0
     prop_invalid = 0
     prop_ambiguous = 0
-    max_gap = 0
-    max_ungap = 0
 
     rows = []
     for name, seq, qual in fastas:
         num_seqs += 1
+
         for base in seq:
             num_bases += 1
-            gap = 1
 
             if base.upper() in 'ACGT':
                 num_acgt += 1
-                gap = 0
-            elif base.upper() in 'NX':
-                num_masked += 1
+                current_ungap += 1
+                if current_gap > max_gap:
+                    max_gap = current_gap
+                current_gap = 0
+
             elif base.upper() in 'WSMKRYBDHV':
                 num_ambiguous += 1
-                gap = 0
+                current_ungap += 1
+                if current_gap > max_gap:
+                    max_gap = current_gap
+                current_gap = 0
+            
+            elif base.upper() in 'NX':
+                num_masked += 1
+                current_gap += 1
+                if current_ungap > max_ungap:
+                    max_ungap = current_ungap
+                current_ungap = 0
+            
             else:
                 num_invalid += 1
-
-            if gap:
-                if curr_ungap_len > 0:
-                    n_ungaps.append(curr_ungap_len)
-                    curr_ungap_len = 0
-                curr_gap_len += 1
-            elif not gap:
-                if curr_gap_len > 0:
-                    n_gaps.append(curr_gap_len)
-                    curr_gap_len = 0
-                curr_ungap_len += 1
-
-    if curr_gap_len > 0:
-        n_gaps.append(curr_gap_len)
-    elif curr_ungap_len > 0:
-        n_gaps.append(curr_ungap_len)
+                current_gap += 1
+                if current_ungap > max_ungap:
+                    max_ungap = current_ungap
+                current_ungap = 0
 
     if num_bases > 0:
         prop_acgt = num_acgt / num_bases * 100.0
         prop_masked = num_masked / num_bases * 100.0
         prop_invalid = num_invalid / num_bases * 100.0
         prop_ambiguous = num_ambiguous / num_bases * 100.0
-
-        if len(n_gaps) > 0:
-            max_gap = max(n_gaps)
-        else:
-            max_gap = 0
-
-        if len(n_ungaps) > 0:
-            max_ungap = max(n_ungaps)
-        else:
-            max_ungap = 0
     else:
         prop_invalid = 100.0
 
@@ -367,39 +342,19 @@ def swell_from_depth(depth_path, tiles, genomes, thresholds, min_pos=None, min_p
 
 
 def swell_from_bam(bam_path, tiles, genomes, thresholds, min_pos=None, min_pos_total_zero=False):
-    depth_iterable = (x.group(0) for x in re.finditer('.*\n', pysam.depth('-a', bam_path)[:-1]))
+    depth_iterable = (x.group(0) for x in re.finditer('.*\n', pysam.depth('-a', bam_path)[:-1])) # type: ignore
     return swell_from_depth_iter(depth_iterable, bam_path, tiles, genomes, thresholds, min_pos=None, min_pos_total_zero=False)
 
 
-# def swell_from_bam(bam_path, tiles, genome):
-#     bam = pysam.AlignmentFile(bam_path)
-
-#    for (scheme_name, tile_num, tile) in tiles:
-#        tile_cover = bam.count_coverage(genome, tile[0]-1, tile[1],
-#                quality_threshold=0, read_callback="all")
-#        flat_tile_cover = np.array(tile_cover).sum(axis=0)
-
-#        mean_cov = np.mean(flat_tile_cover)
-#        median_cov = np.median(flat_tile_cover)
-#        print(bam_path, tile_num, tile[0], tile[1], scheme_name, mean_cov, median_cov)
-
-
-class ArgumentParserError(Exception):
-    pass
-
-
-class ErrorThrowingArgParser(argparse.ArgumentParser):
-    def error(self, message):
-        raise ArgumentParserError(message)
-
-
 def main():
-    parser = ErrorThrowingArgParser()
+    start = time.time()
+
+    parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest='command')
 
     fasta_parser = subparsers.add_parser("fasta")
     fasta_parser.add_argument("fasta_path")
-    fasta_parser.add_argument("--average", action="store_true")
+    fasta_parser.add_argument("--summarise", action="store_true")
     fasta_parser.add_argument("--dp", default=2, type=int, required=False)
     fasta_parser.add_argument("-x", action="append", nargs=2, metavar=("key", "value",))
 
@@ -427,7 +382,7 @@ def main():
 
     fasta_bam_parser = subparsers.add_parser("fasta-bam")
     fasta_bam_parser.add_argument("fasta_path")
-    fasta_bam_parser.add_argument("--average", action="store_true")
+    fasta_bam_parser.add_argument("--summarise", action="store_true")
     fasta_bam_parser.add_argument("bam_path")
     fasta_bam_parser.add_argument("--bed", required=True)
     fasta_bam_parser.add_argument("--ref", required=True, nargs='+')
@@ -438,6 +393,19 @@ def main():
     fasta_bam_parser.add_argument("--dp", default=2, type=int, required=False)
     fasta_bam_parser.add_argument("-x", action="append", nargs=2, metavar=("key", "value",))
 
+    fasta_depth_parser = subparsers.add_parser("fasta-depth")
+    fasta_depth_parser.add_argument("fasta_path")
+    fasta_depth_parser.add_argument("--summarise", action="store_true")
+    fasta_depth_parser.add_argument("depth_path")
+    fasta_depth_parser.add_argument("--bed", required=True)
+    fasta_depth_parser.add_argument("--ref", required=True, nargs='+')
+    fasta_depth_parser.add_argument("--thresholds", action='append', type=int, nargs='+', default=[1, 5, 10, 20, 50, 100, 200])
+    fasta_depth_parser.add_argument("--min-pos", type=int, required=False)
+    fasta_depth_parser.add_argument("--min-pos-allow-total-zero", action="store_true")
+    fasta_depth_parser.add_argument("--no-tile-clipping", action="store_true")
+    fasta_depth_parser.add_argument("--dp", default=2, type=int, required=False)
+    fasta_depth_parser.add_argument("-x", action="append", nargs=2, metavar=("key", "value",))
+
     args = parser.parse_args()
 
     header = []
@@ -445,31 +413,46 @@ def main():
 
     if args.command:
         if args.command == "fasta":
-            if (not args.average):
+            if (not args.summarise):
                 header_, fields_ = swell_from_fasta(args.fasta_path)
             else:
-                header_, fields_ = average_swell_from_fasta(args.fasta_path)
+                header_, fields_ = summarise_swell_from_fasta(args.fasta_path)
             header.extend(header_)
             fields.extend(fields_)
+
         elif args.command == "bam":
             tiles = load_scheme(args.bed, args.no_tile_clipping)
             header_, fields_ = swell_from_bam(args.bam_path, tiles, args.ref, args.thresholds, min_pos=args.min_pos, min_pos_total_zero=args.min_pos_allow_total_zero)
             header.extend(header_)
             fields.extend(fields_)
+        
         elif args.command == "depth":
             tiles = load_scheme(args.bed, args.no_tile_clipping)
             header_, fields_ = swell_from_depth(args.depth_path, tiles, args.ref, args.thresholds, min_pos=args.min_pos, min_pos_total_zero=args.min_pos_allow_total_zero)
             header.extend(header_)
             fields.extend(fields_)
+        
         elif args.command == "fasta-bam":
-            if (not args.average):
+            if (not args.summarise):
                 header_, fields_ = swell_from_fasta(args.fasta_path)
             else:
-                header_, fields_ = average_swell_from_fasta(args.fasta_path)  
+                header_, fields_ = summarise_swell_from_fasta(args.fasta_path)  
             header.extend(header_)
             fields.extend(fields_)
             tiles = load_scheme(args.bed, args.no_tile_clipping)
             header_, fields_ = swell_from_bam(args.bam_path, tiles, args.ref, args.thresholds, min_pos=args.min_pos, min_pos_total_zero=args.min_pos_allow_total_zero)
+            header.extend(header_)
+            fields[0].extend(fields_[0])
+        
+        elif args.command == "fasta-depth":
+            if (not args.summarise):
+                header_, fields_ = swell_from_fasta(args.fasta_path)
+            else:
+                header_, fields_ = summarise_swell_from_fasta(args.fasta_path)  
+            header.extend(header_)
+            fields.extend(fields_)
+            tiles = load_scheme(args.bed, args.no_tile_clipping)
+            header_, fields_ = swell_from_depth(args.depth_path, tiles, args.ref, args.thresholds, min_pos=args.min_pos, min_pos_total_zero=args.min_pos_allow_total_zero)
             header.extend(header_)
             fields[0].extend(fields_[0])
         
@@ -486,6 +469,9 @@ def main():
         for row in fields:
             row_s = [("%."+str(args.dp)+"f") % x if "float" in type(x).__name__ else str(x) for x in row] # do not fucking @ me
             print("\t".join([str(x) for x in row_s]))
+        
+        end = time.time()
+        #print(f"time taken: {end - start}")
 
 
 if __name__ == "__main__":
