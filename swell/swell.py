@@ -260,6 +260,7 @@ def swell_from_depth_iter(depth_iterable, depth_path, tiles, genomes, thresholds
         n_positions += 1
         avg_cov = avg_cov + (cov - avg_cov)/n_positions
 
+        # Add coverage value to every open tile at this position
         if tiles and pos < len(open_tiles):
             for t_i in open_tiles[pos]:
                 tile_data[t_i].append(cov)
@@ -309,7 +310,7 @@ def swell_from_depth(depth_path, tiles, genomes, thresholds, min_pos=None, min_p
 
 
 def swell_from_bam(bam_path, tiles, genomes, thresholds, min_pos=None, min_pos_total_zero=False):
-    depth_iterable = (x.group(0) for x in re.finditer('.*\n', pysam.depth('-a', bam_path)[:-1])) # type: ignore
+    depth_iterable = (x.group(0)[:-1] for x in re.finditer('.*\n', pysam.depth('-a', '-d', '1000000', bam_path))) # type: ignore
     return swell_from_depth_iter(depth_iterable, bam_path, tiles, genomes, thresholds, min_pos, min_pos_total_zero)
 
 
