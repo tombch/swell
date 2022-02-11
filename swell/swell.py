@@ -235,7 +235,11 @@ def swell_from_depth_iter(depth_iterable, depth_path, tiles, genomes, thresholds
 
     tile_starts = [t[2]["inside_start"] for t in tiles] # dont use -1 for 1-pos depth files
     tile_ends = [t[2]["inside_end"] for t in tiles]
-    open_tiles = [[] for i in range(0, max(tile_ends) + 1)]
+    if tile_ends:
+        max_tile_end = max(tile_ends)
+    else:
+        max_tile_end = -1
+    open_tiles = [[] for i in range(0, max_tile_end + 1)]
     for i, (start, end) in enumerate(zip(tile_starts, tile_ends)):
         for j in range(start, end + 1):
             open_tiles[j].append(i)
