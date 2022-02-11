@@ -4,7 +4,6 @@ import pysam
 import argparse
 import numpy as np
 from . import readfq # thanks heng
-import time
 
 
 def clip_tiles(tiles):
@@ -27,7 +26,7 @@ def clip_tiles(tiles):
     return new_tiles
 
 
-def load_scheme(scheme_bed, no_clip=False):
+def load_scheme(scheme_bed, clip=True):
     tiles_dict = {}
     scheme_fh = open(scheme_bed)
     for line in scheme_fh:
@@ -81,8 +80,7 @@ def load_scheme(scheme_bed, no_clip=False):
             tiles_seen.add(tile)
 
     tiles_list = sorted(tiles_list, key=lambda x: int(x[1])) # sort by tile number
-    # Clips by default
-    if not no_clip:
+    if clip: # Default
         new_tiles = clip_tiles(tiles_list)
     else:
         new_tiles = tiles_list
@@ -229,26 +227,20 @@ def summarise_swell_from_fasta(fasta_path):
 
 
 def swell_from_depth_iter(depth_iterable, depth_path, tiles, genomes, thresholds, min_pos=None, min_pos_total_zero=False):
-    threshold_counters = {
-        threshold: 0 for threshold in thresholds
-    }
-    tile_threshold_counters = {
-        threshold: 0 for threshold in thresholds
-    }
+    threshold_counters = {threshold : 0 for threshold in thresholds}
+    tile_threshold_counters = {threshold : 0 for threshold in thresholds}
     n_positions = 0
     avg_cov = 0
-
-    cursor = 0
-    if tiles:
-        tile_starts = [t[2]["inside_start"] for t in tiles] # dont use -1 for 1-pos depth files
-        tile_ends = [t[2]["inside_end"] for t in tiles]
-
-        closest_cursor = min(tile_starts)
-
-        stat_tiles = [0 for t in tiles]
-        tile_data = [[] for t in tiles]
-
     n_lines = 0
+
+    tile_starts = [t[2]["inside_start"] for t in tiles] # dont use -1 for 1-pos depth files
+    tile_ends = [t[2]["inside_end"] for t in tiles]
+    open_tiles = [[] for i in range(0, max(tile_ends) + 1)]
+    for i, (start, end) in enumerate(zip(tile_starts, tile_ends)):
+        for j in range(start, end + 1):
+            open_tiles[j].append(i)
+
+    tile_data = [[] for t in tiles]
     for line in depth_iterable:
         n_lines += 1
         ref, pos, cov = line.strip().split('\t')
@@ -264,48 +256,19 @@ def swell_from_depth_iter(depth_iterable, depth_path, tiles, genomes, thresholds
         n_positions += 1
         avg_cov = avg_cov + (cov - avg_cov)/n_positions
 
-        if tiles:
-            # Check for new open tiles
-            if pos >= closest_cursor:
-                for t_i, t_start in enumerate(tile_starts):
-                    # If we are in the region of tile t_i and the tile is previously unvisited
-                    if pos >= t_start and stat_tiles[t_i] == 0: 
-                        # Change the state of tile t_i to open
-                        stat_tiles[t_i] = 1 
-
-                next_possible_min = []
-                # Get the minimum tile start out of the remaining unvisited tiles 
-                for t_i, t_start in enumerate(tile_starts):
-                    if stat_tiles[t_i] == 0:
-                        next_possible_min.append(t_start)
-                try:
-                    closest_cursor = min(next_possible_min)
-                except ValueError:
-                    closest_cursor = sys.maxsize
-
-            # Handle open tiles
-            for t_i, t_state in enumerate(stat_tiles):
-                # If tile t_i is open, append the current coverage/depth value to t_i's list of coverages
-                if t_state == 1:
-                    tile_data[t_i].append(cov)
-                # If our current position is at the end of t_i
-                if tile_ends[t_i] <= pos:
-                    # Mark tile t_i as closed
-                    stat_tiles[t_i] = -1 
+        if tiles and pos < len(open_tiles):
+            for t_i in open_tiles[pos]:
+                tile_data[t_i].append(cov)
 
     tile_vector = []
-    for t_i, (scheme_name, tile_num, tile) in enumerate(tiles):
-        len_win = len(tile_data[t_i])
-        mean_cov = np.mean(tile_data[t_i])
-        median_cov = np.median(tile_data[t_i])
-        
+    for covs in tile_data:
+        median_cov = np.median(covs)
         tile_vector.append(median_cov)
 
         # Count tile means above threshold
         for threshold in threshold_counters:
             if median_cov >= threshold:
                 tile_threshold_counters[threshold] += 1
-        # print(depth_path, tile_num, tile[0], tile[1], scheme_name, mean_cov, median_cov, len_win)
 
     if min_pos:
         if n_positions < min_pos:
@@ -338,17 +301,15 @@ def swell_from_depth_iter(depth_iterable, depth_path, tiles, genomes, thresholds
 
 def swell_from_depth(depth_path, tiles, genomes, thresholds, min_pos=None, min_pos_total_zero=False):
     depth_fh = open(depth_path)
-    return swell_from_depth_iter(depth_fh, depth_path, tiles, genomes, thresholds, min_pos=None, min_pos_total_zero=False)
+    return swell_from_depth_iter(depth_fh, depth_path, tiles, genomes, thresholds, min_pos, min_pos_total_zero)
 
 
 def swell_from_bam(bam_path, tiles, genomes, thresholds, min_pos=None, min_pos_total_zero=False):
     depth_iterable = (x.group(0) for x in re.finditer('.*\n', pysam.depth('-a', bam_path)[:-1])) # type: ignore
-    return swell_from_depth_iter(depth_iterable, bam_path, tiles, genomes, thresholds, min_pos=None, min_pos_total_zero=False)
+    return swell_from_depth_iter(depth_iterable, bam_path, tiles, genomes, thresholds, min_pos, min_pos_total_zero)
 
 
 def main():
-    start = time.time()
-
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest='command')
 
@@ -360,23 +321,23 @@ def main():
 
     bam_parser = subparsers.add_parser("bam")
     bam_parser.add_argument("bam_path")
-    bam_parser.add_argument("--bed", required=True)
+    bam_parser.add_argument("--bed")
     bam_parser.add_argument("--ref", required=True, nargs='+')
     bam_parser.add_argument("--thresholds", action='append', type=int, nargs='+', default=[1, 5, 10, 20, 50, 100, 200])
     bam_parser.add_argument("--min-pos", type=int, required=False)
     bam_parser.add_argument("--min-pos-allow-total-zero", action="store_true")
-    bam_parser.add_argument("--no-tile-clipping", action="store_true")
+    bam_parser.add_argument("--no-clip", action="store_true")
     bam_parser.add_argument("--dp", default=2, type=int, required=False)
     bam_parser.add_argument("-x", action="append", nargs=2, metavar=("key", "value",))
 
     depth_parser = subparsers.add_parser("depth")
     depth_parser.add_argument("depth_path")
-    depth_parser.add_argument("--bed", required=True)
+    depth_parser.add_argument("--bed")
     depth_parser.add_argument("--ref", required=True, nargs='+')
     depth_parser.add_argument("--thresholds", action='append', type=int, nargs='+', default=[1, 5, 10, 20, 50, 100, 200])
     depth_parser.add_argument("--min-pos", type=int, required=False)
     depth_parser.add_argument("--min-pos-allow-total-zero", action="store_true")
-    depth_parser.add_argument("--no-tile-clipping", action="store_true")
+    depth_parser.add_argument("--no-clip", action="store_true")
     depth_parser.add_argument("--dp", default=2, type=int, required=False)
     depth_parser.add_argument("-x", action="append", nargs=2, metavar=("key", "value",))
 
@@ -384,12 +345,12 @@ def main():
     fasta_bam_parser.add_argument("fasta_path")
     fasta_bam_parser.add_argument("--summarise", action="store_true")
     fasta_bam_parser.add_argument("bam_path")
-    fasta_bam_parser.add_argument("--bed", required=True)
+    fasta_bam_parser.add_argument("--bed")
     fasta_bam_parser.add_argument("--ref", required=True, nargs='+')
     fasta_bam_parser.add_argument("--thresholds", action='append', type=int, nargs='+', default=[1, 5, 10, 20, 50, 100, 200])
     fasta_bam_parser.add_argument("--min-pos", type=int, required=False)
     fasta_bam_parser.add_argument("--min-pos-allow-total-zero", action="store_true")
-    fasta_bam_parser.add_argument("--no-tile-clipping", action="store_true")
+    fasta_bam_parser.add_argument("--no-clip", action="store_true")
     fasta_bam_parser.add_argument("--dp", default=2, type=int, required=False)
     fasta_bam_parser.add_argument("-x", action="append", nargs=2, metavar=("key", "value",))
 
@@ -397,12 +358,12 @@ def main():
     fasta_depth_parser.add_argument("fasta_path")
     fasta_depth_parser.add_argument("--summarise", action="store_true")
     fasta_depth_parser.add_argument("depth_path")
-    fasta_depth_parser.add_argument("--bed", required=True)
+    fasta_depth_parser.add_argument("--bed")
     fasta_depth_parser.add_argument("--ref", required=True, nargs='+')
     fasta_depth_parser.add_argument("--thresholds", action='append', type=int, nargs='+', default=[1, 5, 10, 20, 50, 100, 200])
     fasta_depth_parser.add_argument("--min-pos", type=int, required=False)
     fasta_depth_parser.add_argument("--min-pos-allow-total-zero", action="store_true")
-    fasta_depth_parser.add_argument("--no-tile-clipping", action="store_true")
+    fasta_depth_parser.add_argument("--no-clip", action="store_true")
     fasta_depth_parser.add_argument("--dp", default=2, type=int, required=False)
     fasta_depth_parser.add_argument("-x", action="append", nargs=2, metavar=("key", "value",))
 
@@ -412,6 +373,11 @@ def main():
     fields = []
 
     if args.command:
+        if args.command != "fasta" and args.bed:
+            tiles = load_scheme(args.bed, not args.no_clip)
+        else:
+            tiles = {}
+
         if args.command == "fasta":
             if (not args.summarise):
                 header_, fields_ = swell_from_fasta(args.fasta_path)
@@ -421,13 +387,11 @@ def main():
             fields.extend(fields_)
 
         elif args.command == "bam":
-            tiles = load_scheme(args.bed, args.no_tile_clipping)
             header_, fields_ = swell_from_bam(args.bam_path, tiles, args.ref, args.thresholds, min_pos=args.min_pos, min_pos_total_zero=args.min_pos_allow_total_zero)
             header.extend(header_)
             fields.extend(fields_)
         
         elif args.command == "depth":
-            tiles = load_scheme(args.bed, args.no_tile_clipping)
             header_, fields_ = swell_from_depth(args.depth_path, tiles, args.ref, args.thresholds, min_pos=args.min_pos, min_pos_total_zero=args.min_pos_allow_total_zero)
             header.extend(header_)
             fields.extend(fields_)
@@ -439,7 +403,6 @@ def main():
                 header_, fields_ = summarise_swell_from_fasta(args.fasta_path)  
             header.extend(header_)
             fields.extend(fields_)
-            tiles = load_scheme(args.bed, args.no_tile_clipping)
             header_, fields_ = swell_from_bam(args.bam_path, tiles, args.ref, args.thresholds, min_pos=args.min_pos, min_pos_total_zero=args.min_pos_allow_total_zero)
             header.extend(header_)
             fields[0].extend(fields_[0])
@@ -451,7 +414,6 @@ def main():
                 header_, fields_ = summarise_swell_from_fasta(args.fasta_path)  
             header.extend(header_)
             fields.extend(fields_)
-            tiles = load_scheme(args.bed, args.no_tile_clipping)
             header_, fields_ = swell_from_depth(args.depth_path, tiles, args.ref, args.thresholds, min_pos=args.min_pos, min_pos_total_zero=args.min_pos_allow_total_zero)
             header.extend(header_)
             fields[0].extend(fields_[0])
@@ -469,10 +431,11 @@ def main():
         for row in fields:
             row_s = [("%."+str(args.dp)+"f") % x if "float" in type(x).__name__ else str(x) for x in row] # do not fucking @ me
             print("\t".join([str(x) for x in row_s]))
-        
-        end = time.time()
-        #print(f"time taken: {end - start}")
 
 
 if __name__ == "__main__":
+    # import time
+    # start = time.time()
     main()
+    # end = time.time()
+    # print(end - start)
