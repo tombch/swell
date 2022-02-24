@@ -2,16 +2,18 @@ from swell import swell
 from swell import old_swell
 
 
-bed_path = '../samples/nCoV-2019.scheme.bed'
-fasta_path = '../samples/s1.fasta'
-depth_path = '../samples/s1.bam.depth'
-bam_path = '../samples/s1.bam'
+bed_path_new = '../artic-ncov2019/primer_schemes/nCoV-2019/V3/nCoV-2019.primer.bed'
+bed_path_old = '../artic-ncov2019/primer_schemes/nCoV-2019/V3/nCoV-2019.scheme.bed'
+fasta_path = '../samples/sample1.run1.fasta'
+depth_path = '../samples/sample1.run1.bam.depth'
+bam_path = '../samples/sample1.run1.bam'
+qc_path = '../samples/qc.tsv'
 genomes = ['MN908947.3']
 thresholds = [1, 5, 10, 20, 50, 100, 200]
 
 
 def test_load_scheme():
-    assert swell.load_scheme(bed_path) == old_swell.load_scheme(bed_path)
+    assert swell.load_scheme(bed_path_new) == old_swell.load_scheme(bed_path_old)
 
 
 def test_swell_from_fasta():
@@ -43,10 +45,10 @@ def test_swell_from_fasta_summarise():
 
 
 def test_swell_from_depth():
-    new_tiles = swell.load_scheme(bed_path)
+    new_tiles = swell.load_scheme(bed_path_new)
     new_header, new_fields = swell.swell_from_depth(depth_path, new_tiles, genomes, thresholds)
     new_fields = new_fields[0]
-    old_tiles = old_swell.load_scheme(bed_path)
+    old_tiles = old_swell.load_scheme(bed_path_old)
     old_header, old_fields = old_swell.swell_from_depth(depth_path, old_tiles, genomes, thresholds)
     assert new_header == old_header and new_fields == old_fields
 
@@ -59,10 +61,10 @@ def test_swell_from_depth_no_bed():
 
 
 def test_swell_from_bam():
-    new_tiles = swell.load_scheme(bed_path)
+    new_tiles = swell.load_scheme(bed_path_new)
     new_header, new_fields = swell.swell_from_bam(bam_path, new_tiles, genomes, thresholds)
     new_fields = new_fields[0]
-    old_tiles = old_swell.load_scheme(bed_path)
+    old_tiles = old_swell.load_scheme(bed_path_old)
     old_header, old_fields = old_swell.swell_from_depth(depth_path, old_tiles, genomes, thresholds)
     assert new_header == old_header and new_fields == old_fields
 

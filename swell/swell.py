@@ -3,6 +3,7 @@ import sys
 import pysam
 import argparse
 import numpy as np
+import concurrent.futures
 from . import readfq # thanks heng
 
 
@@ -30,7 +31,8 @@ def load_scheme(scheme_bed, clip=True):
     tiles_dict = {}
     scheme_fh = open(scheme_bed)
     for line in scheme_fh:
-        ref, start, end, tile, pool = line.strip().split()
+        data = line.strip().split()
+        start, end, tile = data[1], data[2], data[3] 
         scheme, tile, side = tile.split("_", 2)
 
         start = int(start)
@@ -72,7 +74,8 @@ def load_scheme(scheme_bed, clip=True):
     tiles_seen = set([])
     scheme_fh.seek(0)
     for line in scheme_fh:
-        ref, start, end, tile, pool = line.strip().split()
+        data = line.strip().split()
+        start, end, tile = data[1], data[2], data[3] 
         scheme, tile, side = tile.split("_", 2)
         tile_tup = (scheme, tile, tiles_dict[tile])
         if tiles_dict[tile]["inside_start"] != -1 and tiles_dict[tile]["inside_end"] != -1 and tile not in tiles_seen:
@@ -235,15 +238,7 @@ def swell_from_depth_iter(depth_iterable, depth_path, tiles, genomes, thresholds
 
     tile_starts = [t[2]["inside_start"] for t in tiles] # dont use -1 for 1-pos depth files
     tile_ends = [t[2]["inside_end"] for t in tiles]
-    if tile_ends:
-        max_tile_end = max(tile_ends)
-    else:
-        max_tile_end = -1
-    open_tiles = [[] for i in range(0, max_tile_end + 1)]
-    for i, (start, end) in enumerate(zip(tile_starts, tile_ends)):
-        for j in range(start, end + 1):
-            open_tiles[j].append(i)
-
+    
     tile_data = [[] for t in tiles]
     for line in depth_iterable:
         n_lines += 1
@@ -261,9 +256,10 @@ def swell_from_depth_iter(depth_iterable, depth_path, tiles, genomes, thresholds
         avg_cov = avg_cov + (cov - avg_cov)/n_positions
 
         # Add coverage value to every open tile at this position
-        if tiles and pos < len(open_tiles):
-            for t_i in open_tiles[pos]:
-                tile_data[t_i].append(cov)
+        if tiles:
+            for t_i, (start, end) in enumerate(zip(tile_starts, tile_ends)):
+                if start <= pos <= end:
+                    tile_data[t_i].append(cov)
 
     tile_vector = []
     for covs in tile_data:
@@ -298,7 +294,7 @@ def swell_from_depth_iter(depth_iterable, depth_path, tiles, genomes, thresholds
         tile_vector_str = "-"
     else:
         tile_vector_str = ",".join(["%.2f" % x for x in tile_vector])
-
+    
     rows = []
     rows.append([depth_path.replace(".depth", ""), n_positions, avg_cov] + threshold_counts_prop + tile_threshold_counts_prop + [len(tile_vector), tile_vector_str])
     return ["bam_path", "num_pos", "mean_cov"] + ["pc_pos_cov_gte%d" % x for x in sorted(thresholds)] + ["pc_tiles_medcov_gte%d" % x for x in sorted(thresholds)] + ["tile_n", "tile_vector"], rows 
@@ -310,8 +306,70 @@ def swell_from_depth(depth_path, tiles, genomes, thresholds, min_pos=None, min_p
 
 
 def swell_from_bam(bam_path, tiles, genomes, thresholds, min_pos=None, min_pos_total_zero=False):
-    depth_iterable = (x.group(0)[:-1] for x in re.finditer('.*\n', pysam.depth('-a', '-d', '1000000', bam_path))) # type: ignore
+    # samtools 1.14
+    # pysam 0.18.0 - much better than 0.16
+    depth_iterable = (x.group(0)[:-1] for x in re.finditer('.*\n', pysam.depth('-a', bam_path))) # type: ignore
     return swell_from_depth_iter(depth_iterable, bam_path, tiles, genomes, thresholds, min_pos, min_pos_total_zero)
+
+
+def swell_from_row(args):
+    # Assign individual variable names to the arguments, construct a dictionary for the row, and prepare tiles
+    line, genomes, table_header, metadata_columns, thresholds, dp, min_pos, min_pos_total_zero, clip = args
+    record = dict(zip(table_header, line.split()))
+    if not record['ref'] in set(genomes):
+        genomes.append(record['ref'])
+    tiles = load_scheme(record['bed_path'], clip)
+
+    # Run swell fasta and swell bam on the paths given in the record. Then, return the outputted fields as a tab-separated string
+    _, fields = swell_from_fasta(record['fasta_path'])
+    _, fields_ = swell_from_bam(record['bam_path'], tiles, genomes, thresholds, min_pos, min_pos_total_zero)
+    fields[0].extend(fields_[0])
+    formatted_fields = [("%."+str(dp)+"f") % x if "float" in type(x).__name__ else str(x) for x in fields[0]]
+    # Add additional metadata given in the input table
+    formatted_fields += [record.get(column) for column in metadata_columns]
+    return "\t".join([str(x) for x in formatted_fields])
+
+
+def swell_from_chunk(ichunk, genomes, table_header, metadata_columns, thresholds, dp, min_pos, min_pos_total_zero, clip):
+    # Construct list of arguments to pass to executor
+    args_list = [(line, genomes, table_header, metadata_columns, thresholds, dp, min_pos, min_pos_total_zero, clip) for line in ichunk]
+    # Run swell as multiple processes
+    # The context manager is exited once all processes are completed
+    with concurrent.futures.ProcessPoolExecutor() as executor:
+        results = executor.map(swell_from_row, args_list)
+    # 'results' contains an iterator of the process outputs, in the order that the processes were started
+    return results
+
+
+def swell_from_table(table_path, genomes, thresholds, dp, min_pos=None, min_pos_total_zero=False, clip=True):
+    swell_header = ["fasta_path", "header", "num_seqs", "num_bases", "pc_acgt", "pc_masked", "pc_invalid", "pc_ambiguous", "longest_gap", "longest_ungap", "bam_path", "num_pos", "mean_cov"]
+    swell_header += ["pc_pos_cov_gte%d" % x for x in sorted(thresholds)]
+    swell_header += ["pc_tiles_medcov_gte%d" % x for x in sorted(thresholds)]
+    swell_header += ["tile_n", "tile_vector"]
+
+    with open(table_path) as table:
+        table_header = table.readline().split()
+        metadata_columns = [x for x in table_header if not (x in set(swell_header))]
+        swell_header.extend(metadata_columns)
+        print("\t".join(swell_header))
+
+        # Iterate through the lines in the file, processing num_lines worth of lines at a time
+        num_lines = 12
+        ichunk = []
+        for i, line in enumerate(table):
+            ichunk.append(line)
+            if ((i + 1) % num_lines) == 0:
+                # Finished obtaining a chunk of lines from the file
+                # Now, process the chunk
+                ochunk = swell_from_chunk(ichunk, genomes, table_header, metadata_columns, thresholds, dp, min_pos, min_pos_total_zero, clip)
+                # The output is printed and we move to the next chunk
+                print('\n'.join(ochunk))
+                ichunk = []
+        # Process the remaining partially filled chunk of lines
+        if ichunk:
+            ochunk = swell_from_chunk(ichunk, genomes, table_header, metadata_columns, thresholds, dp, min_pos, min_pos_total_zero, clip)
+            print('\n'.join(ochunk))
+            ichunk = []
 
 
 def main():
@@ -372,13 +430,22 @@ def main():
     fasta_depth_parser.add_argument("--dp", default=2, type=int, required=False)
     fasta_depth_parser.add_argument("-x", action="append", nargs=2, metavar=("key", "value",))
 
+    table_parser = subparsers.add_parser("table")
+    table_parser.add_argument("table_path")
+    table_parser.add_argument("--ref", required=False, default=[], nargs='+')
+    table_parser.add_argument("--thresholds", action='append', type=int, nargs='+', default=[1, 5, 10, 20, 50, 100, 200])
+    table_parser.add_argument("--min-pos", type=int, required=False)
+    table_parser.add_argument("--min-pos-allow-total-zero", action="store_true")
+    table_parser.add_argument("--no-clip", action="store_true")
+    table_parser.add_argument("--dp", default=2, type=int, required=False)
+
     args = parser.parse_args()
 
     header = []
     fields = []
 
     if args.command:
-        if args.command != "fasta" and args.bed:
+        if (not args.command in ["fasta", "table"]) and args.bed:
             tiles = load_scheme(args.bed, not args.no_clip)
         else:
             tiles = {}
@@ -423,24 +490,24 @@ def main():
             header.extend(header_)
             fields[0].extend(fields_[0])
         
-        keys = []
-        values = []
-        if args.x:
-            for key, value in args.x:
-                keys.append(key)
-                values.append(value)
-        header.extend(keys)
-        fields[0].extend(values)
+        elif args.command == "table":
+            swell_from_table(args.table_path, args.ref, args.thresholds, args.dp, min_pos=args.min_pos, min_pos_total_zero=args.min_pos_allow_total_zero, clip=not args.no_clip)
+        
+        if (not args.command == "table"):
+            keys = []
+            values = []
+            if args.x:
+                for key, value in args.x:
+                    keys.append(key)
+                    values.append(value)
+            header.extend(keys)
+            fields[0].extend(values)
 
-        print("\t".join(header))
-        for row in fields:
-            row_s = [("%."+str(args.dp)+"f") % x if "float" in type(x).__name__ else str(x) for x in row] # do not fucking @ me
-            print("\t".join([str(x) for x in row_s]))
+            print("\t".join(header))
+            for row in fields:
+                row_s = [("%."+str(args.dp)+"f") % x if "float" in type(x).__name__ else str(x) for x in row] # do not fucking @ me
+                print("\t".join([str(x) for x in row_s]))
 
 
 if __name__ == "__main__":
-    # import time
-    # start = time.time()
     main()
-    # end = time.time()
-    # print(end - start)
