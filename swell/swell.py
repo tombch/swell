@@ -315,11 +315,14 @@ def swell_from_bam(bam_path, tiles, genomes, thresholds, min_pos=None, min_pos_t
 def swell_from_row(args):
     # Assign individual variable names to the arguments, construct a dictionary for the row, and prepare tiles
     line, genomes, table_header, metadata_columns, thresholds, dp, min_pos, min_pos_total_zero, clip = args
-    record = dict(zip(table_header, line.split()))
-    if not record['ref'] in set(genomes):
+    record = dict(zip(table_header, [x.rstrip('\n') for x in line.split('\t')]))
+    if record['ref'] and (not record['ref'] in set(genomes)):
         genomes.append(record['ref'])
-    tiles = load_scheme(record['bed_path'], clip)
-
+    
+    tiles = {}
+    if record['bed_path']:
+        tiles = load_scheme(record['bed_path'], clip)
+    
     # Run swell fasta and swell bam on the paths given in the record. Then, return the outputted fields as a tab-separated string
     _, fields = swell_from_fasta(record['fasta_path'])
     _, fields_ = swell_from_bam(record['bam_path'], tiles, genomes, thresholds, min_pos, min_pos_total_zero)
