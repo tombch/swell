@@ -313,11 +313,8 @@ def swell_from_bam(bam_path, tiles, genomes, thresholds, min_pos=None, min_pos_t
     return swell_from_depth_iter(depth_iterable, bam_path, tiles, genomes, thresholds, min_pos, min_pos_total_zero)
 
 
-def swell_from_row(args):
-    # Assign individual variable names to the arguments
-    record, genomes, metadata_headers, thresholds, dp, min_pos, min_pos_total_zero, clip = args
-
-    if record['ref'] and (not record['ref'] in set(genomes)):
+def swell_from_row(record, genomes, metadata_headers, thresholds, dp, min_pos, min_pos_total_zero, clip):
+    if record.get('ref') and (not record['ref'] in genomes):
         genomes.append(record['ref'])
     tiles = {}
     if record['bed_path']:
@@ -333,17 +330,6 @@ def swell_from_row(args):
     return "\t".join([str(x) for x in formatted_fields])
 
 
-def swell_from_chunk(ichunk, genomes, metadata_headers, thresholds, dp, min_pos, min_pos_total_zero, clip):
-    # Construct list of arguments to pass to executor
-    args_list = [(record, genomes, metadata_headers, thresholds, dp, min_pos, min_pos_total_zero, clip) for record in ichunk]
-    # Run swell as multiple processes
-    # The context manager is exited once all processes are completed
-    with concurrent.futures.ProcessPoolExecutor() as executor:
-        results = executor.map(swell_from_row, args_list)
-    # 'results' contains an iterator of the process outputs, in the order that the processes were started
-    return results
-
-
 def swell_from_table(table_path, genomes, thresholds, dp, min_pos=None, min_pos_total_zero=False, clip=True):
     swell_headers = ["fasta_path", "header", "num_seqs", "num_bases", "pc_acgt", "pc_masked", "pc_invalid", "pc_ambiguous", "longest_gap", "longest_ungap", "bam_path", "num_pos", "mean_cov"]
     swell_headers += ["pc_pos_cov_gte%d" % x for x in sorted(thresholds)]
@@ -354,27 +340,21 @@ def swell_from_table(table_path, genomes, thresholds, dp, min_pos=None, min_pos_
         reader = csv.DictReader(table, delimiter='\t')
         table_headers = reader.fieldnames
         if table_headers:
-            metadata_headers = [x for x in table_headers if not (x in set(swell_headers))]
+            metadata_headers = [x for x in table_headers if (not x in set(swell_headers))]
             swell_headers.extend(metadata_headers)
             print("\t".join(swell_headers))
 
-            # Iterate through the lines in the file, processing num_lines worth of lines at a time
-            num_lines = 12
-            ichunk = []
-            for i, record in enumerate(reader):
-                ichunk.append(record)
-                if ((i + 1) % num_lines) == 0:
-                    # Finished obtaining a chunk of lines from the file
-                    # Now, process the chunk
-                    ochunk = swell_from_chunk(ichunk, genomes, metadata_headers, thresholds, dp, min_pos, min_pos_total_zero, clip)
-                    # The output is printed and we move to the next chunk
-                    print('\n'.join(ochunk))
-                    ichunk = []
-            # Process the remaining partially filled chunk of lines
-            if ichunk:
-                ochunk = swell_from_chunk(ichunk, genomes, metadata_headers, thresholds, dp, min_pos, min_pos_total_zero, clip)
-                print('\n'.join(ochunk))
-                ichunk = []
+            # Faster checks of genome existence
+            genomes = set(genomes)
+            
+            with concurrent.futures.ProcessPoolExecutor(max_workers=12) as executor:
+                # 'submit' schedules the function to be executed
+                # Returns a 'Future' object, which allows us to check if the process' result and/or if it is running/done
+                results = [executor.submit(swell_from_row, record, genomes, metadata_headers, thresholds, dp, min_pos, min_pos_total_zero, clip) for record in reader]
+                
+                # Prints as processes are completed
+                for f in concurrent.futures.as_completed(results):
+                    print(f.result())
 
 
 def main():
