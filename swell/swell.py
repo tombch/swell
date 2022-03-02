@@ -335,7 +335,7 @@ def swell_from_row(args):
 
 def swell_from_chunk(ichunk, genomes, metadata_headers, thresholds, dp, min_pos, min_pos_total_zero, clip):
     # Construct list of arguments to pass to executor
-    args_list = [(line, genomes, metadata_headers, thresholds, dp, min_pos, min_pos_total_zero, clip) for line in ichunk]
+    args_list = [(record, genomes, metadata_headers, thresholds, dp, min_pos, min_pos_total_zero, clip) for record in ichunk]
     # Run swell as multiple processes
     # The context manager is exited once all processes are completed
     with concurrent.futures.ProcessPoolExecutor() as executor:
