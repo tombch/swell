@@ -1,5 +1,6 @@
 import re
 import sys
+import csv
 import pysam
 import argparse
 import numpy as np
@@ -313,12 +314,11 @@ def swell_from_bam(bam_path, tiles, genomes, thresholds, min_pos=None, min_pos_t
 
 
 def swell_from_row(args):
-    # Assign individual variable names to the arguments, construct a dictionary for the row, and prepare tiles
-    line, genomes, table_header, metadata_columns, thresholds, dp, min_pos, min_pos_total_zero, clip = args
-    record = dict(zip(table_header, [x.rstrip('\n') for x in line.split('\t')]))
+    # Assign individual variable names to the arguments
+    record, genomes, metadata_headers, thresholds, dp, min_pos, min_pos_total_zero, clip = args
+
     if record['ref'] and (not record['ref'] in set(genomes)):
         genomes.append(record['ref'])
-    
     tiles = {}
     if record['bed_path']:
         tiles = load_scheme(record['bed_path'], clip)
@@ -329,13 +329,13 @@ def swell_from_row(args):
     fields[0].extend(fields_[0])
     formatted_fields = [("%."+str(dp)+"f") % x if "float" in type(x).__name__ else str(x) for x in fields[0]]
     # Add additional metadata given in the input table
-    formatted_fields += [record.get(column) for column in metadata_columns]
+    formatted_fields += [record.get(column) for column in metadata_headers]
     return "\t".join([str(x) for x in formatted_fields])
 
 
-def swell_from_chunk(ichunk, genomes, table_header, metadata_columns, thresholds, dp, min_pos, min_pos_total_zero, clip):
+def swell_from_chunk(ichunk, genomes, metadata_headers, thresholds, dp, min_pos, min_pos_total_zero, clip):
     # Construct list of arguments to pass to executor
-    args_list = [(line, genomes, table_header, metadata_columns, thresholds, dp, min_pos, min_pos_total_zero, clip) for line in ichunk]
+    args_list = [(line, genomes, metadata_headers, thresholds, dp, min_pos, min_pos_total_zero, clip) for line in ichunk]
     # Run swell as multiple processes
     # The context manager is exited once all processes are completed
     with concurrent.futures.ProcessPoolExecutor() as executor:
@@ -345,40 +345,41 @@ def swell_from_chunk(ichunk, genomes, table_header, metadata_columns, thresholds
 
 
 def swell_from_table(table_path, genomes, thresholds, dp, min_pos=None, min_pos_total_zero=False, clip=True):
-    swell_header = ["fasta_path", "header", "num_seqs", "num_bases", "pc_acgt", "pc_masked", "pc_invalid", "pc_ambiguous", "longest_gap", "longest_ungap", "bam_path", "num_pos", "mean_cov"]
-    swell_header += ["pc_pos_cov_gte%d" % x for x in sorted(thresholds)]
-    swell_header += ["pc_tiles_medcov_gte%d" % x for x in sorted(thresholds)]
-    swell_header += ["tile_n", "tile_vector"]
+    swell_headers = ["fasta_path", "header", "num_seqs", "num_bases", "pc_acgt", "pc_masked", "pc_invalid", "pc_ambiguous", "longest_gap", "longest_ungap", "bam_path", "num_pos", "mean_cov"]
+    swell_headers += ["pc_pos_cov_gte%d" % x for x in sorted(thresholds)]
+    swell_headers += ["pc_tiles_medcov_gte%d" % x for x in sorted(thresholds)]
+    swell_headers += ["tile_n", "tile_vector"]
 
     with open(table_path) as table:
-        table_header = table.readline().split()
-        metadata_columns = [x for x in table_header if not (x in set(swell_header))]
-        swell_header.extend(metadata_columns)
-        print("\t".join(swell_header))
+        reader = csv.DictReader(table, delimiter='\t')
+        table_headers = reader.fieldnames
+        if table_headers:
+            metadata_headers = [x for x in table_headers if not (x in set(swell_headers))]
+            swell_headers.extend(metadata_headers)
+            print("\t".join(swell_headers))
 
-        # Iterate through the lines in the file, processing num_lines worth of lines at a time
-        num_lines = 12
-        ichunk = []
-        for i, line in enumerate(table):
-            ichunk.append(line)
-            if ((i + 1) % num_lines) == 0:
-                # Finished obtaining a chunk of lines from the file
-                # Now, process the chunk
-                ochunk = swell_from_chunk(ichunk, genomes, table_header, metadata_columns, thresholds, dp, min_pos, min_pos_total_zero, clip)
-                # The output is printed and we move to the next chunk
+            # Iterate through the lines in the file, processing num_lines worth of lines at a time
+            num_lines = 12
+            ichunk = []
+            for i, record in enumerate(reader):
+                ichunk.append(record)
+                if ((i + 1) % num_lines) == 0:
+                    # Finished obtaining a chunk of lines from the file
+                    # Now, process the chunk
+                    ochunk = swell_from_chunk(ichunk, genomes, metadata_headers, thresholds, dp, min_pos, min_pos_total_zero, clip)
+                    # The output is printed and we move to the next chunk
+                    print('\n'.join(ochunk))
+                    ichunk = []
+            # Process the remaining partially filled chunk of lines
+            if ichunk:
+                ochunk = swell_from_chunk(ichunk, genomes, metadata_headers, thresholds, dp, min_pos, min_pos_total_zero, clip)
                 print('\n'.join(ochunk))
                 ichunk = []
-        # Process the remaining partially filled chunk of lines
-        if ichunk:
-            ochunk = swell_from_chunk(ichunk, genomes, table_header, metadata_columns, thresholds, dp, min_pos, min_pos_total_zero, clip)
-            print('\n'.join(ochunk))
-            ichunk = []
 
 
 def main():
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest='command')
-
     fasta_parser = subparsers.add_parser("fasta")
     fasta_parser.add_argument("fasta_path")
     fasta_parser.add_argument("--summarise", action="store_true")
