@@ -330,7 +330,7 @@ def swell_from_row(record, genomes, metadata_headers, thresholds, dp, min_pos, m
     return "\t".join([str(x) for x in formatted_fields])
 
 
-def swell_from_table(table_path, genomes, thresholds, dp, min_pos=None, min_pos_total_zero=False, clip=True):
+def swell_from_table(table_path, max_workers, genomes, thresholds, dp, min_pos=None, min_pos_total_zero=False, clip=True):
     swell_headers = ["fasta_path", "header", "num_seqs", "num_bases", "pc_acgt", "pc_masked", "pc_invalid", "pc_ambiguous", "longest_gap", "longest_ungap", "bam_path", "num_pos", "mean_cov"]
     swell_headers += ["pc_pos_cov_gte%d" % x for x in sorted(thresholds)]
     swell_headers += ["pc_tiles_medcov_gte%d" % x for x in sorted(thresholds)]
@@ -346,8 +346,7 @@ def swell_from_table(table_path, genomes, thresholds, dp, min_pos=None, min_pos_
 
             # Faster checks of genome existence
             genomes = set(genomes)
-            
-            with concurrent.futures.ProcessPoolExecutor(max_workers=12) as executor:
+            with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
                 # 'submit' schedules the function to be executed
                 # Returns a 'Future' object, which allows us to check if the process' result and/or if it is running/done
                 results = [executor.submit(swell_from_row, record, genomes, metadata_headers, thresholds, dp, min_pos, min_pos_total_zero, clip) for record in reader]
@@ -422,6 +421,7 @@ def main():
     table_parser.add_argument("--min-pos-allow-total-zero", action="store_true")
     table_parser.add_argument("--no-clip", action="store_true")
     table_parser.add_argument("--dp", default=2, type=int, required=False)
+    table_parser.add_argument("--max-workers", default=24, type=int)
 
     args = parser.parse_args()
 
@@ -475,7 +475,7 @@ def main():
             fields[0].extend(fields_[0])
         
         elif args.command == "table":
-            swell_from_table(args.table_path, args.ref, args.thresholds, args.dp, min_pos=args.min_pos, min_pos_total_zero=args.min_pos_allow_total_zero, clip=not args.no_clip)
+            swell_from_table(args.table_path, args.max_workers, args.ref, args.thresholds, args.dp, min_pos=args.min_pos, min_pos_total_zero=args.min_pos_allow_total_zero, clip=not args.no_clip)
         
         if (not args.command == "table"):
             keys = []
