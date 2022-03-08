@@ -89,10 +89,75 @@ def load_scheme(scheme_bed, clip=True):
     else:
         new_tiles = tiles_list
 
+    scheme_fh.close()
     return new_tiles
 
 
+def calculate_fasta_stats(seq):
+    num_seqs = 0
+    num_bases = 0
+    num_acgt = 0
+    num_masked = 0
+    num_invalid = 0
+    num_ambiguous = 0
+    current_gap = 0
+    current_ungap = 0
+    max_gap = 0
+    max_ungap = 0
+    prop_acgt = 0
+    prop_masked = 0
+    prop_invalid = 0
+    prop_ambiguous = 0
+
+    if seq:
+        num_seqs += 1
+
+    for base in seq:
+        num_bases += 1
+
+        if base.upper() in 'ACGT':
+            num_acgt += 1
+            current_ungap += 1
+            if current_gap > max_gap:
+                max_gap = current_gap
+            current_gap = 0
+
+        elif base.upper() in 'WSMKRYBDHV':
+            num_ambiguous += 1
+            current_ungap += 1
+            if current_gap > max_gap:
+                max_gap = current_gap
+            current_gap = 0
+        
+        elif base.upper() in 'NX':
+            num_masked += 1
+            current_gap += 1
+            if current_ungap > max_ungap:
+                max_ungap = current_ungap
+            current_ungap = 0
+        
+        else:
+            num_invalid += 1
+            current_gap += 1
+            if current_ungap > max_ungap:
+                max_ungap = current_ungap
+            current_ungap = 0
+
+    if num_bases > 0:
+        prop_acgt = num_acgt / num_bases * 100.0
+        prop_masked = num_masked / num_bases * 100.0
+        prop_invalid = num_invalid / num_bases * 100.0
+        prop_ambiguous = num_ambiguous / num_bases * 100.0
+    else:
+        prop_invalid = 100.0
+    
+    return [num_seqs, num_bases, prop_acgt, prop_masked, prop_invalid, prop_ambiguous, max_gap, max_ungap]
+
+
 def swell_from_fasta(fasta_path):
+    '''
+    Calculate fasta statistics given the path to a fasta/multifasta.
+    '''
     if fasta_path == "-":
         fastas = readfq.readfq(sys.stdin)
     else:
@@ -100,64 +165,18 @@ def swell_from_fasta(fasta_path):
         
     rows = []
     for name, seq, qual in fastas:
-        num_seqs = 1
-        num_bases = 0
-        num_acgt = 0
-        num_masked = 0
-        num_invalid = 0
-        num_ambiguous = 0
-        current_gap = 0
-        current_ungap = 0
-        max_gap = 0
-        max_ungap = 0
-        prop_acgt = 0
-        prop_masked = 0
-        prop_invalid = 0
-        prop_ambiguous = 0
+        rows.append([fasta_path, name] + calculate_fasta_stats(seq))
 
-        for base in seq:
-            num_bases += 1
+    if fasta_path != "-":
+        fastas.close()
+    return ["fasta_path", "header", "num_seqs", "num_bases", "pc_acgt", "pc_masked", "pc_invalid", "pc_ambiguous", "longest_gap", "longest_ungap"], rows
 
-            if base.upper() in 'ACGT':
-                num_acgt += 1
-                current_ungap += 1
-                if current_gap > max_gap:
-                    max_gap = current_gap
-                current_gap = 0
 
-            elif base.upper() in 'WSMKRYBDHV':
-                num_ambiguous += 1
-                current_ungap += 1
-                if current_gap > max_gap:
-                    max_gap = current_gap
-                current_gap = 0
-            
-            elif base.upper() in 'NX':
-                num_masked += 1
-                current_gap += 1
-                if current_ungap > max_ungap:
-                    max_ungap = current_ungap
-                current_ungap = 0
-            
-            else:
-                num_invalid += 1
-                current_gap += 1
-                if current_ungap > max_ungap:
-                    max_ungap = current_ungap
-                current_ungap = 0
-
-        if num_bases > 0:
-            prop_acgt = num_acgt / num_bases * 100.0
-            prop_masked = num_masked / num_bases * 100.0
-            prop_invalid = num_invalid / num_bases * 100.0
-            prop_ambiguous = num_ambiguous / num_bases * 100.0
-        else:
-            prop_invalid = 100.0
-
-        # TODO: is this reliable
-        header = (name.split('|'))[0]
-        rows.append([fasta_path, header, num_seqs, num_bases, prop_acgt, prop_masked, prop_invalid, prop_ambiguous, max_gap, max_ungap])
-
+def swell_from_fasta_seq(seq, fasta_path="", header=""):
+    '''
+    Calculate fasta statistics directly from a sequence.
+    '''
+    rows = [[fasta_path, header] + calculate_fasta_stats(seq)]
     return ["fasta_path", "header", "num_seqs", "num_bases", "pc_acgt", "pc_masked", "pc_invalid", "pc_ambiguous", "longest_gap", "longest_ungap"], rows
 
 
@@ -226,7 +245,9 @@ def summarise_swell_from_fasta(fasta_path):
         prop_invalid = 100.0
 
     rows.append([fasta_path, "-", num_seqs, num_bases, prop_acgt, prop_masked, prop_invalid, prop_ambiguous, max_gap, max_ungap])
-    
+
+    if fasta_path != "-":
+        fastas.close()
     return ["fasta_path", "header", "num_seqs", "num_bases", "pc_acgt", "pc_masked", "pc_invalid", "pc_ambiguous", "longest_gap", "longest_ungap"], rows
 
 
@@ -303,7 +324,9 @@ def swell_from_depth_iter(depth_iterable, depth_path, tiles, genomes, thresholds
 
 def swell_from_depth(depth_path, tiles, genomes, thresholds, min_pos=None, min_pos_total_zero=False):
     depth_fh = open(depth_path)
-    return swell_from_depth_iter(depth_fh, depth_path, tiles, genomes, thresholds, min_pos, min_pos_total_zero)
+    header, rows = swell_from_depth_iter(depth_fh, depth_path, tiles, genomes, thresholds, min_pos, min_pos_total_zero)
+    depth_fh.close()
+    return header, rows
 
 
 def swell_from_bam(bam_path, tiles, genomes, thresholds, min_pos=None, min_pos_total_zero=False):
@@ -313,43 +336,63 @@ def swell_from_bam(bam_path, tiles, genomes, thresholds, min_pos=None, min_pos_t
     return swell_from_depth_iter(depth_iterable, bam_path, tiles, genomes, thresholds, min_pos, min_pos_total_zero)
 
 
-def swell_from_row(record, genomes, metadata_headers, thresholds, dp, min_pos, min_pos_total_zero, clip):
-    if record.get('ref') and (not record['ref'] in genomes):
-        genomes.append(record['ref'])
+def swell_from_row(record, multi_fasta_record, genomes, metadata_header, thresholds, dp, min_pos, min_pos_total_zero, clip):
+    # If the reference attached to the current record is not already in the provided list of references, add it
+    ref = record.get('ref')
+    if ref and (not ref in genomes):
+        genomes.add(ref)
+
+    # If a .bed file is provided, load the scheme for it (clipping by default)
     tiles = {}
-    if record['bed_path']:
-        tiles = load_scheme(record['bed_path'], clip)
+    if record.get('bed_path'):
+        tiles = load_scheme(record.get('bed_path'), clip)
     
-    # Run swell fasta and swell bam on the paths given in the record. Then, return the outputted fields as a tab-separated string
-    _, fields = swell_from_fasta(record['fasta_path'])
-    _, fields_ = swell_from_bam(record['bam_path'], tiles, genomes, thresholds, min_pos, min_pos_total_zero)
+    # Run swell fasta and swell bam on the paths given in the record. 
+    # If the sequence is directly provided from a multifasta, use this instead of opening an individual fasta file
+    if multi_fasta_record:
+        header, seq = multi_fasta_record
+        _, fields = swell_from_fasta_seq(seq, record.get('fasta_path'), header)
+    else:
+        _, fields = swell_from_fasta(record.get('fasta_path'))
+    _, fields_ = swell_from_bam(record.get('bam_path'), tiles, genomes, thresholds, min_pos, min_pos_total_zero)
     fields[0].extend(fields_[0])
+    
+    # Format the fields, and add additional metadata given in the input table
     formatted_fields = [("%."+str(dp)+"f") % x if "float" in type(x).__name__ else str(x) for x in fields[0]]
-    # Add additional metadata given in the input table
-    formatted_fields += [record.get(column) for column in metadata_headers]
+    formatted_fields += [record.get(column) for column in metadata_header]
+    # Then, return the outputted fields as a tab-separated string
     return "\t".join([str(x) for x in formatted_fields])
 
 
-def swell_from_table(table_path, max_workers, genomes, thresholds, dp, min_pos=None, min_pos_total_zero=False, clip=True):
-    swell_headers = ["fasta_path", "header", "num_seqs", "num_bases", "pc_acgt", "pc_masked", "pc_invalid", "pc_ambiguous", "longest_gap", "longest_ungap", "bam_path", "num_pos", "mean_cov"]
-    swell_headers += ["pc_pos_cov_gte%d" % x for x in sorted(thresholds)]
-    swell_headers += ["pc_tiles_medcov_gte%d" % x for x in sorted(thresholds)]
-    swell_headers += ["tile_n", "tile_vector"]
+def swell_from_table(table_path, max_workers, genomes, thresholds, dp, multi_fasta_path=None, min_pos=None, min_pos_total_zero=False, clip=True):
+    swell_header = ["fasta_path", "header", "num_seqs", "num_bases", "pc_acgt", "pc_masked", "pc_invalid", "pc_ambiguous", "longest_gap", "longest_ungap", "bam_path", "num_pos", "mean_cov"]
+    swell_header += ["pc_pos_cov_gte%d" % x for x in sorted(thresholds)]
+    swell_header += ["pc_tiles_medcov_gte%d" % x for x in sorted(thresholds)]
+    swell_header += ["tile_n", "tile_vector"]
+
+    # If a multifasta file is provided, fasta sequences will be pulled from here (instead of their individual fasta file)
+    if multi_fasta_path:
+        fasta = pysam.FastaFile(multi_fasta_path) # type: ignore
+        # Dictionary storing fasta headers + sequences, with the pag names as keys
+        pag_to_fasta = {ref.split('|')[0] : (ref, fasta.fetch(ref)) for ref in fasta.references} 
+    else:
+        pag_to_fasta = {}
 
     with open(table_path) as table:
         reader = csv.DictReader(table, delimiter='\t')
-        table_headers = reader.fieldnames
-        if table_headers:
-            metadata_headers = [x for x in table_headers if (not x in set(swell_headers))]
-            swell_headers.extend(metadata_headers)
-            print("\t".join(swell_headers))
+        table_header = reader.fieldnames
+        if table_header:
+            # Attach all table headers that swell doesn't output, this is additional metadata
+            metadata_header = [x for x in table_header if (not x in set(swell_header))]
+            swell_header.extend(metadata_header)
+            print("\t".join(swell_header))
 
-            # Faster checks of genome existence
+            # Convert to a set for O(1) checks of genome existence
             genomes = set(genomes)
             with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
                 # 'submit' schedules the function to be executed
                 # Returns a 'Future' object, which allows us to check if the process' result and/or if it is running/done
-                results = [executor.submit(swell_from_row, record, genomes, metadata_headers, thresholds, dp, min_pos, min_pos_total_zero, clip) for record in reader]
+                results = [executor.submit(swell_from_row, record, pag_to_fasta.get(record.get('pag_name')), genomes, metadata_header, thresholds, dp, min_pos, min_pos_total_zero, clip) for record in reader]
                 
                 # Prints as processes are completed
                 for f in concurrent.futures.as_completed(results):
@@ -415,6 +458,7 @@ def main():
 
     table_parser = subparsers.add_parser("table")
     table_parser.add_argument("table_path")
+    table_parser.add_argument("--multi-fasta")
     table_parser.add_argument("--ref", required=False, default=[], nargs='+')
     table_parser.add_argument("--thresholds", action='append', type=int, nargs='+', default=[1, 5, 10, 20, 50, 100, 200])
     table_parser.add_argument("--min-pos", type=int, required=False)
@@ -475,7 +519,7 @@ def main():
             fields[0].extend(fields_[0])
         
         elif args.command == "table":
-            swell_from_table(args.table_path, args.max_workers, args.ref, args.thresholds, args.dp, min_pos=args.min_pos, min_pos_total_zero=args.min_pos_allow_total_zero, clip=not args.no_clip)
+            swell_from_table(args.table_path, args.max_workers, args.ref, args.thresholds, args.dp, args.multi_fasta, min_pos=args.min_pos, min_pos_total_zero=args.min_pos_allow_total_zero, clip=not args.no_clip)
         
         if (not args.command == "table"):
             keys = []
