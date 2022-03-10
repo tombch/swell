@@ -336,7 +336,7 @@ def swell_from_bam(bam_path, tiles, genomes, thresholds, min_pos=None, min_pos_t
     return swell_from_depth_iter(depth_iterable, bam_path, tiles, genomes, thresholds, min_pos, min_pos_total_zero)
 
 
-def swell_from_row(record, multi_fasta_record, genomes, metadata_header, thresholds, dp, min_pos, min_pos_total_zero, clip):
+def swell_from_row(record, seq, header, genomes, metadata_header, thresholds, dp, min_pos, min_pos_total_zero, clip):
     # If the reference attached to the current record is not already in the provided list of references, add it
     ref = record.get('ref')
     if ref and (not ref in genomes):
@@ -348,9 +348,8 @@ def swell_from_row(record, multi_fasta_record, genomes, metadata_header, thresho
         tiles = load_scheme(record.get('bed_path'), clip)
     
     # Run swell fasta and swell bam on the paths given in the record. 
-    # If the sequence is directly provided from a multifasta, use this instead of opening an individual fasta file
-    if multi_fasta_record:
-        header, seq = multi_fasta_record
+    if seq and header:
+        # If the sequence and header were directly provided from a multifasta, use this instead of opening an individual fasta file
         _, fields = swell_from_fasta_seq(seq, record.get('fasta_path'), header)
     else:
         _, fields = swell_from_fasta(record.get('fasta_path'))
@@ -364,6 +363,11 @@ def swell_from_row(record, multi_fasta_record, genomes, metadata_header, thresho
     return "\t".join([str(x) for x in formatted_fields])
 
 
+def fasta_fetch(fasta, header):
+    if (not isinstance(fasta, type(None))) and (not isinstance(header, type(None))):
+        return fasta.fetch(header)
+
+
 def swell_from_table(table_path, max_workers, genomes, thresholds, dp, multi_fasta_path=None, min_pos=None, min_pos_total_zero=False, clip=True):
     swell_header = ["fasta_path", "header", "num_seqs", "num_bases", "pc_acgt", "pc_masked", "pc_invalid", "pc_ambiguous", "longest_gap", "longest_ungap", "bam_path", "num_pos", "mean_cov"]
     swell_header += ["pc_pos_cov_gte%d" % x for x in sorted(thresholds)]
@@ -373,10 +377,11 @@ def swell_from_table(table_path, max_workers, genomes, thresholds, dp, multi_fas
     # If a multifasta file is provided, fasta sequences will be pulled from here (instead of their individual fasta file)
     if multi_fasta_path:
         fasta = pysam.FastaFile(multi_fasta_path) # type: ignore
-        # Dictionary storing fasta headers + sequences, with the pag names as keys
-        pag_to_fasta = {ref.split('|')[0] : (ref, fasta.fetch(ref)) for ref in fasta.references} 
+        # Dictionary storing fasta headers, with the pag names as keys
+        pag_to_header = {ref.split('|')[0] : ref for ref in fasta.references} 
     else:
-        pag_to_fasta = {}
+        fasta = None
+        pag_to_header = {}
 
     with open(table_path) as table:
         reader = csv.DictReader(table, delimiter='\t')
@@ -392,7 +397,7 @@ def swell_from_table(table_path, max_workers, genomes, thresholds, dp, multi_fas
             with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
                 # 'submit' schedules the function to be executed
                 # Returns a 'Future' object, which allows us to check if the process' result and/or if it is running/done
-                results = [executor.submit(swell_from_row, record, pag_to_fasta.get(record.get('pag_name')), genomes, metadata_header, thresholds, dp, min_pos, min_pos_total_zero, clip) for record in reader]
+                results = [executor.submit(swell_from_row, record, fasta_fetch(fasta, pag_to_header.get(record.get('pag_name'))), pag_to_header.get(record.get('pag_name')), genomes, metadata_header, thresholds, dp, min_pos, min_pos_total_zero, clip) for record in reader]
                 
                 # Prints as processes are completed
                 for f in concurrent.futures.as_completed(results):
