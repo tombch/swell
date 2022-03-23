@@ -1,6 +1,6 @@
 import glob
 from swell import swell
-from swell import swell_original
+from tests import swell_original
 
 # Put paths here
 bed_new = ""
